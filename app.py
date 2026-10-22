@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
@@ -10,14 +11,20 @@ def create_app():
     """Application factory pattern for creating the Flask app"""
     app = Flask(__name__)
 
-    # Database and Security Configuration
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ecommerce.db' # Or PostgreSQL URI for Render
+    # Database and Security Configuration using Environment Variables
+    database_uri = os.environ.get('DATABASE_URL', 'sqlite:///ecommerce.db')
+    
+    # Render provides postgres:// which SQLAlchemy 2.0+ needs as postgresql://
+    if database_uri and database_uri.startswith("postgres://"):
+        database_uri = database_uri.replace("postgres://", "postgresql://", 1)
+
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_uri
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY'] = 'your-super-secret-jwt-key' # Change in production!
+    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'fallback-secret-key')
 
     # Initialize Extensions
     db.init_app(app)
-    migrate = Migrate(app, db) # Initialize Flask-Migrate for database schema tracking
+    migrate = Migrate(app, db)
     jwt = JWTManager(app)
 
     # Register Blueprints with URL prefixes
@@ -44,7 +51,7 @@ def create_app():
 
     @app.errorhandler(500)
     def internal_server_error(error):
-        db.session.rollback() # Rollback any failed database transactions
+        db.session.rollback()
         return jsonify({"error": "Internal Server Error", "message": "An unexpected error occurred on the server"}), 500
 
     return app
