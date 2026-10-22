@@ -7,6 +7,12 @@ from models.user import User
 
 orders_bp = Blueprint('orders', __name__)
 
+def is_admin():
+    """Helper function to check if the current JWT holder is an admin"""
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    return user and user.is_admin
+
 @orders_bp.route('/', methods=['POST'])
 @jwt_required()
 def create_order():
@@ -16,7 +22,7 @@ def create_order():
     items_data = data.get('items', []) # Expects a list of {"product_id": 1, "quantity": 2}
 
     if not items_data:
-        return jsonify({"error": "No items provided in the order"}, 400)
+        return jsonify({"error": "No items provided in the order"}), 400
 
     calculated_total = 0
     order_items_to_create = []
@@ -54,7 +60,7 @@ def create_order():
     new_order = Order(
         user_id=current_user_id,
         total_amount=calculated_total,
-        status='completed'
+        status='pending'
     )
     
     db.session.add(new_order)
@@ -85,3 +91,27 @@ def get_user_orders():
         orders = Order.query.filter_by(user_id=current_user_id).all()
 
     return jsonify([order.to_dict() for order in orders]), 200
+
+
+@orders_bp.route('/<int:order_id>/status', methods=['PUT'])
+@jwt_required()
+def update_order_status(order_id):
+    """Admin-only endpoint to update an order's fulfillment status"""
+    if not is_admin():
+        return jsonify({"error": "Admin privileges required"}), 403
+
+    order = Order.query.get_or_404(order_id)
+    data = request.get_json()
+    new_status = data.get('status')
+
+    allowed_statuses = ['pending', 'shipped', 'completed', 'cancelled']
+    if new_status not in allowed_statuses:
+        return jsonify({"error": f"Invalid status. Choose from {allowed_statuses}"}), 400
+
+    order.status = new_status
+    db.session.commit()
+
+    return jsonify({
+        "message": "Order status updated successfully",
+        "order": order.to_dict()
+    }), 200
