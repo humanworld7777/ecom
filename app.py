@@ -1,7 +1,6 @@
 import os
 from flask import Flask, jsonify
 from flask_jwt_extended import JWTManager
-from flask_migrate import Migrate
 from models import db
 from blueprints.auth import auth_bp
 from blueprints.products import products_bp
@@ -24,7 +23,6 @@ def create_app():
 
     # Initialize Extensions
     db.init_app(app)
-    migrate = Migrate(app, db)
     jwt = JWTManager(app)
 
     # Register Blueprints with URL prefixes
@@ -53,6 +51,10 @@ def create_app():
     def internal_server_error(error):
         db.session.rollback()
         return jsonify({"error": "Internal Server Error", "message": "An unexpected error occurred on the server"}), 500
+
+    # Automatically create database tables on startup if they don't exist
+    with app.app_context():
+        db.create_all()
 
     return app
 
