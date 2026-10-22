@@ -70,3 +70,39 @@ def create_product():
         "message": "Product created successfully",
         "product": new_product.to_dict()
     }), 201
+
+@products_bp.route('/<int:product_id>', methods=['PUT'])
+@jwt_required()
+def update_product(product_id):
+    """Admin-only endpoint to update an existing product"""
+    if not is_admin():
+        return jsonify({"error": "Admin privileges required"}), 403
+
+    product = Product.query.get_or_404(product_id)
+    data = request.get_json()
+
+    product.name = data.get('name', product.name)
+    product.description = data.get('description', product.description)
+    product.price = data.get('price', product.price)
+    product.stock = data.get('stock', product.stock)
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Product updated successfully",
+        "product": product.to_dict()
+    }), 200
+
+@products_bp.route('/<int:product_id>', methods=['DELETE'])
+@jwt_required()
+def delete_product(product_id):
+    """Admin-only endpoint to delete a product"""
+    if not is_admin():
+        return jsonify({"error": "Admin privileges required"}), 403
+
+    product = Product.query.get_or_404(product_id)
+    
+    db.session.delete(product)
+    db.session.commit()
+
+    return jsonify({"message": "Product deleted successfully"}), 200
