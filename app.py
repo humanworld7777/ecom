@@ -3,6 +3,7 @@ from flask import Flask
 from flask_jwt_extended import JWTManager
 from models import db
 from blueprints.auth import auth_bp
+from blueprints.products import products_bp
 
 def create_app():
     app = Flask(__name__)
@@ -24,6 +25,7 @@ def create_app():
     
     # Register Blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
+    app.register_blueprint(products_bp, url_prefix='/api/v1/products')
     
     with app.app_context():
         db.create_all()
