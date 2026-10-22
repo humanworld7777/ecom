@@ -1,5 +1,6 @@
 from flask import Flask, jsonify
 from flask_jwt_extended import JWTManager
+from flask_migrate import Migrate
 from models import db
 from blueprints.auth import auth_bp
 from blueprints.products import products_bp
@@ -10,13 +11,13 @@ def create_app():
     app = Flask(__name__)
 
     # Database and Security Configuration
-    # (In production, use environment variables for keys and DB URIs)
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ecommerce.db' # Or PostgreSQL URI for Render
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = 'your-super-secret-jwt-key' # Change in production!
 
     # Initialize Extensions
     db.init_app(app)
+    migrate = Migrate(app, db) # Initialize Flask-Migrate for database schema tracking
     jwt = JWTManager(app)
 
     # Register Blueprints with URL prefixes
@@ -45,10 +46,6 @@ def create_app():
     def internal_server_error(error):
         db.session.rollback() # Rollback any failed database transactions
         return jsonify({"error": "Internal Server Error", "message": "An unexpected error occurred on the server"}), 500
-
-    # Create database tables if they don't exist
-    with app.app_context():
-        db.create_all()
 
     return app
 
