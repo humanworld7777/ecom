@@ -16,7 +16,7 @@ next_id = 1
 
 @app.get("/")
 def health():
-  return {'status": "ok"}
+  return {"status": "ok"}
 
 @app.post"/products", response_model=Product, status_code=201)
 def create_product(p: ProductIn):
