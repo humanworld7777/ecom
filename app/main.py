@@ -18,7 +18,7 @@ next_id = 1
 def health():
   return {"status": "ok"}
 
-@app.post"/products", response_model=Product, status_code=201)
+@app.post("/products", response_model=Product, status_code=201)
 def create_product(p: ProductIn):
   global next_id
   product = Product(id=next_id, **p.model_dump())
@@ -26,7 +26,7 @@ def create_product(p: ProductIn):
   next_id += 1
   return product
 
-@app.get)"/products", response_model=list[Product])
+@app.get("/products", response_model=list[Product])
 def list_products():
   return list(products.values())
 
