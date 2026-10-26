@@ -145,8 +145,19 @@ def delete_product(
     if product:
         db.delete(product)
         db.commit()
-    
-  
+
+@app.get("/debug/admin-check")
+def admin_check(email: str = ""):
+    admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    return {
+        "admin_email_is_set": bool(admin_email),
+        "admin_email_length": len(admin_email),
+        "your_email_length": len(email.strip()),
+        "match": bool(admin_email) and email.strip().lower() == admin_email,
+    }
+
+
+
 
 
 
