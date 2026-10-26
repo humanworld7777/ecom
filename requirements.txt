@@ -3,3 +3,6 @@ uvicorn[standard]
 sqlalchemy
 pydantic
 psycopg2-binary
+bcrypt
+PyJWT
+python-multipart
