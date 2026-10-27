@@ -14,10 +14,12 @@ from .auth import (
 )
 from .database import Base, engine, get_db
 from .models import ProductDB, UserDB
+from .cart import router as cart_router
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Ecom API")
+app.include_router(cart_router)
 
 
 # ---------- Schemas ----------
