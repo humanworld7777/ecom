@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from .auth import get_current_user
 from .database import get_db
 from .models import CartItemDB, OrderDB, OrderItemDB, ProductDB, UserDB
+from .payments import router as payments_router
 
 router = APIRouter()
+router.include_router(payments_router)
 
 
 # ---------- Schemas ----------
@@ -180,7 +182,9 @@ def checkout(
         .all()
     }
 
-    order = OrderDB(user_id=user.id, status="placed", total=0)
+    # The stock is held for the customer until the order is paid or the
+    # payment page expires (see app/payments.py).
+    order = OrderDB(user_id=user.id, status="pending_payment", total=0)
     total = 0.0
 
     for item in cart_items:
