@@ -55,7 +55,6 @@ def test_only_admin_can_create_products(client, shopper):
   assert client.post("/products", json=body, headers=shopper).status_code == 403
 def test_checkout_flow(client, shopper, product):
     client.delete("/cart", headers=shopper)
-    
     added = client.post(
         "/cart/items",
         json={"product_id": product["id"], "quantity": 2},
