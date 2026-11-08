@@ -92,6 +92,3 @@ def test_checkout_flow(client, shopper, product):
     order = client.post("/orders", headers=shopper).json()
     assert client.get(f"/orders/{order['id']}", headers=shopper).status_code == 200
     assert client.get(f"/orders/{order['id']}", headers=other).status_code == 404
-    
-
-    
