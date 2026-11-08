@@ -17,5 +17,5 @@ from app.main import app
 @pytest.fixture(scope-"session")
 def client():
   with TestClient(app) as test_client:
-    yeild test_client
+    yield test_client
     
