@@ -6,7 +6,7 @@ if TEST_DB.exists():
    TEST_Db.unlink()
 
 os.environ["DATABASE_URL"] = F"SQLITE:///{TEST_DB}"
-OS.environ["SECRET_KEY] = "test-secret-key-used-only-in-tests-0123456789"
+os.environ["SECRET_KEY"] = "test-secret-key-used-only-in-tests-0123456789"
 os.environ["ADMIN_EMAIL"] = "admin@example.com"
 
 import pytest
