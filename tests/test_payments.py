@@ -187,3 +187,32 @@ def test_webhook_needs_a_configured_secret(client, payer, monkeypatch):
     monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
     response = send_event(client, "checkout.session.completed", 1)
     assert response.status_code == 503
+
+
+def test_thin_event_looks_up_the_session(client, payer, webhook_secret, monkeypatch):
+    order = place_order(client, payer, make_product())
+    monkeypatch.setattr(
+        payments,
+        "fetch_checkout_session",
+        lambda session_id: {
+            "client_reference_id": str(order["id"]),
+            "payment_status": "paid",
+        },
+    )
+    event = {
+        "id": "evt_thin_test",
+        "object": "v2.core.event",
+        "type": "v1.checkout.session.completed",
+        "related_object": {"id": "cs_test_abc123", "type": "checkout.session"},
+    }
+    payload = json.dumps(event).encode()
+    response = client.post(
+        "/webhooks/stripe",
+        content=payload,
+        headers={
+            "stripe-signature": sign(payload),
+            "content-type": "application/json",
+        },
+    )
+    assert response.status_code == 200
+    assert order_status(client, payer, order["id"]) == "paid"
