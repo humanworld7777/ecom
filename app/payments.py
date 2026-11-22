@@ -55,8 +55,8 @@ def create_checkout_session(order: OrderDB, base_url: str) -> str:
                 "client_reference_id": str(order.id),
                 "metadata": {"order_id": str(order.id)},
                 "line_items": line_items,
-                "success_url": f"{base_url}/payment/success?order_id={order.id}",
-                "cancel_url": f"{base_url}/payment/cancel?order_id={order.id}",
+                "success_url": f"{base_url}/shop?paid={order.id}",
+                "cancel_url": f"{base_url}/shop?cancelled={order.id}",
                 "expires_at": int(time.time()) + CHECKOUT_MINUTES * 60,
             }
         )
