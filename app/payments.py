@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .auth import get_current_user
 from .database import get_db
-from .models import OrderDB, ProductDB, UserDB
+from .models import OrderDB, ProductDB, ProductSizeDB, UserDB
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,10 @@ def create_checkout_session(order: OrderDB, base_url: str) -> str:
             "price_data": {
                 "currency": currency,
                 "unit_amount": int(round(item.unit_price * 100)),
-                "product_data": {"name": item.product_name},
+                "product_data": {
+                    "name": item.product_name
+                    + (f" (size {item.size})" if item.size else "")
+                },
             },
         }
         for item in order.items
@@ -129,6 +132,19 @@ def cancel_and_restock(db: Session, order_id: int) -> str:
         return f"ignored: order {order_id} is already {order.status}"
     for item in order.items:
         if item.product_id is None:
+            continue
+        if item.size:
+            size_row = (
+                db.query(ProductSizeDB)
+                .filter(
+                    ProductSizeDB.product_id == item.product_id,
+                    ProductSizeDB.label == item.size,
+                )
+                .with_for_update()
+                .first()
+            )
+            if size_row:
+                size_row.stock += item.quantity
             continue
         product = (
             db.query(ProductDB)
