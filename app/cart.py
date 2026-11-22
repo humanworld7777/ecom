@@ -9,10 +9,12 @@ from .database import get_db
 from .models import CartItemDB, OrderDB, OrderItemDB, ProductDB, UserDB
 from .payments import router as payments_router
 from .delivery import router as delivery_router
+from .site import router as site_router
 
 router = APIRouter()
 router.include_router(payments_router)
 router.include_router(delivery_router)
+router.include_router(site_router)
 
 
 # ---------- Schemas ----------
