@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ecom Store</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1c2230; --muted: #667085;
+    --line: #e4e7ec; --accent: #3b5bdb; --accent-text: #ffffff;
+    --ok: #177245; --err: #b42318; --warn: #a15c07;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10131a; --card: #181c26; --text: #e8ebf2; --muted: #9aa3b5;
+      --line: #2a3040; --accent: #7c93f5; --accent-text: #10131a;
+      --ok: #4ade80; --err: #f87171; --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  a { color: var(--accent); }
+  h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+  h2 { font-size: 1.15rem; margin: 0 0 .75rem; }
+  h3 { font-size: 1rem; margin: .5rem 0 .25rem; }
+  .top {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem;
+    padding: .75rem 1.25rem; background: var(--card); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .brand { font-weight: 700; font-size: 1.15rem; text-decoration: none; color: var(--text); }
+  #nav { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; margin-left: auto; }
+  #nav a { text-decoration: none; color: var(--muted); padding: .25rem 0; }
+  #nav a.active { color: var(--text); font-weight: 600; border-bottom: 2px solid var(--accent); }
+  #nav .who { color: var(--muted); font-size: .85rem; }
+  main { max-width: 960px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+  .muted { color: var(--muted); }
+  .small { font-size: .85rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .narrow { max-width: 420px; margin: 2rem auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+  .product { display: flex; flex-direction: column; gap: .15rem; margin: 0; }
+  .product .btn { margin-top: auto; }
+  .tile {
+    height: 110px; border-radius: 8px; display: grid; place-items: center;
+    font-size: 2.5rem; font-weight: 700; color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .price { font-weight: 700; margin: 0; }
+  .btn {
+    display: inline-block; font: inherit; cursor: pointer; text-decoration: none;
+    padding: .5rem 1rem; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text);
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .btn.small { padding: .2rem .6rem; }
+  .btn.ghost { border-color: transparent; color: var(--muted); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; padding: .75rem 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .grow { flex: 1 1 180px; }
+  .qty { display: flex; align-items: center; gap: .5rem; }
+  .amount { min-width: 5rem; text-align: right; font-weight: 600; }
+  .total { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; font-size: 1.1rem; font-weight: 700; }
+  .badge { display: inline-block; font-size: .75rem; font-weight: 600; padding: .1rem .55rem; border-radius: 999px; background: var(--line); }
+  .s-paid, .s-delivered { background: rgba(23,114,69,.16); color: var(--ok); }
+  .s-shipped, .s-in_transit, .s-out_for_delivery, .s-processing { background: rgba(59,91,219,.16); color: var(--accent); }
+  .s-pending_payment, .s-awaiting_address { background: rgba(161,92,7,.16); color: var(--warn); }
+  .s-cancelled { background: rgba(180,35,24,.16); color: var(--err); }
+  .order-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: .5rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+  .form { display: grid; gap: .75rem; }
+  .field { display: grid; gap: .25rem; font-size: .9rem; }
+  input, select {
+    font: inherit; padding: .5rem .65rem; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 100%;
+  }
+  .inline-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .inline-form input, .inline-form select { width: auto; flex: 1 1 140px; }
+  .tabs { display: flex; gap: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
+  .tab { padding: .5rem 0; text-decoration: none; color: var(--muted); }
+  .tab.active { color: var(--text); font-weight: 600; border-bottom: 2px solid var(--accent); }
+  .stepper { display: flex; margin: 1rem 0 1.5rem; padding: 0; list-style: none; }
+  .stepper li { flex: 1; text-align: center; font-size: .75rem; color: var(--muted); position: relative; }
+  .stepper li::before {
+    content: ""; display: block; width: 14px; height: 14px; border-radius: 50%;
+    margin: 0 auto .35rem; background: var(--line); position: relative; z-index: 1;
+  }
+  .stepper li::after {
+    content: ""; position: absolute; top: 6px; left: -50%; width: 100%; height: 2px; background: var(--line);
+  }
+  .stepper li:first-child::after { display: none; }
+  .stepper li.done { color: var(--text); }
+  .stepper li.done::before, .stepper li.done::after { background: var(--accent); }
+  .timeline { list-style: none; padding: 0; margin: 0; }
+  .timeline li { padding: .5rem 0 .5rem 1rem; border-left: 2px solid var(--line); margin-left: .35rem; }
+  .items { margin: .25rem 0; padding-left: 1.1rem; color: var(--muted); font-size: .9rem; }
+  .cols { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  #toasts { position: fixed; right: 1rem; bottom: 1rem; display: grid; gap: .5rem; z-index: 10; max-width: calc(100vw - 2rem); }
+  .toast { padding: .65rem 1rem; border-radius: 8px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+  .toast.ok { border-left: 4px solid var(--ok); }
+  .toast.error { border-left: 4px solid var(--err); }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/shop">Ecom Store</a>
+  <nav id="nav" aria-label="Main"></nav>
+</header>
+<main id="view" aria-live="polite"></main>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+
+// Must match the STRIPE_CURRENCY setting of the server (default usd).
+const CURRENCY = "USD";
+
+const money = (n) =>
+  new Intl.NumberFormat(undefined, { style: "currency", currency: CURRENCY }).format(n);
+
+const LABELS = {
+  pending_payment: "Awaiting payment",
+  paid: "Paid",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+  awaiting_address: "Needs address",
+  processing: "Processing",
+  in_transit: "In transit",
+  out_for_delivery: "Out for delivery",
+  order_placed: "Order placed",
+};
+const label = (s) => LABELS[s] || s;
+const badge = (s) => h("span", { class: "badge s-" + s }, label(s));
+const when = (iso) => (iso ? new Date(iso).toLocaleString() : "");
+
+const state = {
+  token: localStorage.getItem("token"),
+  me: null,
+  cartCount: 0,
+  poll: 0,
+  adminFilter: "",
+};
+
+const $view = document.getElementById("view");
+const $nav = document.getElementById("nav");
+
+// Replaces the page content. Lists are flattened and null/false are skipped,
+// because the browser would print them as text.
+function show(...nodes) {
+  $view.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false));
+}
+
+// ---------- small helpers ----------
+// Builds an element. Text is always added as text, never as HTML.
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "class") el.className = value;
+    else if (key.startsWith("on") && typeof value === "function") {
+      el.addEventListener(key.slice(2), value);
+    } else if (value === true) el.setAttribute(key, "");
+    else if (value !== false && value != null) el.setAttribute(key, value);
+  }
+  for (const child of children.flat()) {
+    if (child == null || child === false) continue;
+    el.append(child.nodeType ? child : document.createTextNode(String(child)));
+  }
+  return el;
+}
+
+function toast(message, kind = "info") {
+  const el = h("div", { class: "toast " + kind, role: "status" }, message);
+  document.getElementById("toasts").append(el);
+  setTimeout(() => el.remove(), 4500);
+}
+
+function go(hash) {
+  if (location.hash === hash) render();
+  else location.hash = hash;
+}
+
+function safeUrl(url) {
+  return typeof url === "string" && /^https?:\/\//i.test(url) ? url : null;
+}
+
+function errorText(data, status) {
+  const detail = data && data.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => (d.loc ? d.loc[d.loc.length - 1] + ": " : "") + d.msg)
+      .join("; ");
+  }
+  return "Something went wrong (" + status + ")";
+}
+
+async function api(path, { method = "GET", json, form, auth = true } = {}) {
+  const headers = {};
+  let body;
+  if (json !== undefined) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(json);
+  }
+  if (form) body = new URLSearchParams(form);
+  if (auth && state.token) headers["Authorization"] = "Bearer " + state.token;
+
+  let res;
+  try {
+    res = await fetch(path, { method, headers, body });
+  } catch (e) {
+    throw new Error("Could not reach the server. It may be waking up, so try again in a moment.");
+  }
+  if (res.status === 204) return null;
+
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* no body */ }
+
+  if (!res.ok) {
+    if (res.status === 401 && auth && state.token) {
+      signOut(false);
+      sessionStorage.setItem("next", location.hash);
+      go("#/login");
+      throw new Error("Please sign in again.");
+    }
+    throw new Error(errorText(data, res.status));
+  }
+  return data;
+}
+
+// ---------- session ----------
+async function loadMe() {
+  if (!state.token) return;
+  try {
+    state.me = await api("/auth/me");
+    const cart = await api("/cart");
+    setCartCount(cart);
+  } catch (e) {
+    state.me = null;
+  }
+}
+
+function signOut(announce = true) {
+  localStorage.removeItem("token");
+  state.token = null;
+  state.me = null;
+  state.cartCount = 0;
+  renderNav();
+  if (announce) {
+    toast("You have been signed out.");
+    go("#/shop");
+  }
+}
+
+function requireLogin() {
+  if (state.me) return true;
+  sessionStorage.setItem("next", location.hash);
+  go("#/login");
+  return false;
+}
+
+function setCartCount(cart) {
+  state.cartCount = cart.items.reduce((n, i) => n + i.quantity, 0);
+  renderNav();
+}
+
+// ---------- navigation ----------
+function renderNav() {
+  const page = location.hash.split("/")[1] || "shop";
+  const link = (target, text) =>
+    h("a", { href: "#/" + target, class: page === target ? "active" : "" }, text);
+
+  const items = [
+    link("shop", "Shop"),
+    link("cart", "Cart" + (state.cartCount ? " (" + state.cartCount + ")" : "")),
+    link("orders", "My orders"),
+  ];
+  if (state.me && state.me.is_admin) items.push(link("admin", "Admin"));
+  if (state.me) {
+    items.push(h("span", { class: "who" }, state.me.email));
+    items.push(h("button", { class: "btn small", onclick: () => signOut() }, "Sign out"));
+  } else {
+    items.push(link("login", "Sign in"));
+  }
+  $nav.replaceChildren(...items);
+}
+
+async function render() {
+  renderNav();
+  const [, page = "shop", arg] = location.hash.split("/");
+  show(h("p", { class: "muted" }, "Loading…"));
+  const views = {
+    shop: viewShop,
+    cart: viewCart,
+    orders: viewOrders,
+    track: viewTrack,
+    checkout: viewCheckout,
+    login: viewLogin,
+    admin: viewAdmin,
+  };
+  try {
+    await (views[page] || viewShop)(arg);
+  } catch (e) {
+    show(
+      h("div", { class: "card" },
+        h("p", {}, e.message),
+        h("button", { class: "btn", onclick: render }, "Try again"))
+    );
+  }
+  window.scrollTo(0, 0);
+}
+
+// ---------- shop ----------
+async function viewShop() {
+  const products = await api("/products", { auth: false });
+  show(
+    h("h1", {}, "Shop"),
+    products.length
+      ? h("div", { class: "grid" }, products.map(productCard))
+      : h("p", { class: "muted" }, "No products yet. Please check back soon.")
+  );
+}
+
+function productCard(p) {
+  const soldOut = p.stock <= 0;
+  const button = h("button", {
+    class: "btn primary",
+    disabled: soldOut,
+    onclick: () => addToCart(p, button),
+  }, soldOut ? "Out of stock" : "Add to cart");
+  return h("article", { class: "card product" },
+    h("div", { class: "tile", "aria-hidden": "true" }, (p.name || "?").trim().charAt(0).toUpperCase()),
+    h("h3", {}, p.name),
+    h("p", { class: "price" }, money(p.price)),
+    h("p", { class: "muted small" },
+      soldOut ? "Currently unavailable" : p.stock <= 5 ? "Only " + p.stock + " left" : "In stock"),
+    button
+  );
+}
+
+async function addToCart(product, button) {
+  if (!requireLogin()) return;
+  button.disabled = true;
+  try {
+    const cart = await api("/cart/items", {
+      method: "POST",
+      json: { product_id: product.id, quantity: 1 },
+    });
+    setCartCount(cart);
+    toast(product.name + " was added to your cart.", "ok");
+  } catch (e) {
+    toast(e.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// ---------- cart ----------
+async function viewCart() {
+  if (!requireLogin()) return;
+  const cart = await api("/cart");
+  setCartCount(cart);
+
+  if (!cart.items.length) {
+    show(
+      h("h1", {}, "Your cart"),
+      h("p", { class: "muted" }, "Your cart is empty."),
+      h("a", { class: "btn", href: "#/shop" }, "Browse products")
+    );
+    return;
+  }
+
+  const rows = cart.items.map((item) =>
+    h("div", { class: "row" },
+      h("div", { class: "grow" },
+        h("strong", {}, item.name),
+        h("div", { class: "muted small" }, money(item.price) + " each")),
+      h("div", { class: "qty" },
+        h("button", { class: "btn small", "aria-label": "Decrease quantity", onclick: () => changeQuantity(item, item.quantity - 1) }, "-"),
+        h("span", {}, item.quantity),
+        h("button", { class: "btn small", "aria-label": "Increase quantity", onclick: () => changeQuantity(item, item.quantity + 1) }, "+")),
+      h("div", { class: "amount" }, money(item.subtotal)),
+      h("button", { class: "btn small ghost", onclick: () => removeItem(item) }, "Remove"))
+  );
+
+  const checkout = h("button", { class: "btn primary", onclick: async () => {
+    checkout.disabled = true;
+    try {
+      const order = await api("/orders", { method: "POST" });
+      state.cartCount = 0;
+      go("#/checkout/" + order.id);
+    } catch (e) {
+      toast(e.message, "error");
+      checkout.disabled = false;
+    }
+  } }, "Checkout");
+
+  show(
+    h("h1", {}, "Your cart"),
+    h("div", { class: "card" },
+      rows,
+      h("div", { class: "total" }, h("span", {}, "Total"), h("span", {}, money(cart.total)))),
+    checkout
+  );
+}
+
+async function changeQuantity(item, quantity) {
+  if (quantity < 1) return removeItem(item);
+  try {
+    await api("/cart/items/" + item.product_id, { method: "PUT", json: { quantity } });
+    await viewCart();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+async function removeItem(item) {
+  try {
+    await api("/cart/items/" + item.product_id, { method: "DELETE" });
+    await viewCart();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+// ---------- delivery address form ----------
+const ADDRESS_FIELDS = [
+  ["recipient_name", "Full name", "name"],
+  ["phone", "Phone", "tel"],
+  ["address_line1", "Address line 1", "address-line1"],
+  ["address_line2", "Address line 2 (optional)", "address-line2"],
+  ["city", "City", "address-level2"],
+  ["state", "State", "address-level1"],
+  ["postal_code", "Postal code", "postal-code"],
+  ["country", "Country", "country-name"],
+];
+
+function addressForm(address, buttonText, onSubmit) {
+  const inputs = {};
+  const fields = ADDRESS_FIELDS.map(([key, text, autocomplete]) => {
+    const input = h("input", {
+      id: "f_" + key,
+      name: key,
+      autocomplete,
+      value: address && address[key] ? address[key] : "",
+      required: key !== "address_line2",
+    });
+    inputs[key] = input;
+    return h("label", { class: "field", for: "f_" + key }, h("span", {}, text), input);
+  });
+  const submit = h("button", { class: "btn primary", type: "submit" }, buttonText);
+  return h("form", { class: "form", onsubmit: async (event) => {
+    event.preventDefault();
+    const data = {};
+    for (const [key] of ADDRESS_FIELDS) {
+      const value = inputs[key].value.trim();
+      data[key] = value === "" ? null : value;
+    }
+    submit.disabled = true;
+    try {
+      await onSubmit(data);
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      submit.disabled = false;
+    }
+  } }, fields, submit);
+}
+
+// ---------- checkout ----------
+async function viewCheckout(id) {
+  if (!requireLogin()) return;
+  const [order, delivery] = await Promise.all([
+    api("/orders/" + id),
+    api("/orders/" + id + "/delivery"),
+  ]);
+
+  if (order.status !== "pending_payment") {
+    show(
+      h("h1", {}, "Order #" + order.id),
+      h("p", {}, "This order is " + label(order.status).toLowerCase() + ", so there is nothing to pay."),
+      h("a", { class: "btn", href: "#/orders" }, "View my orders")
+    );
+    return;
+  }
+
+  const form = addressForm(delivery.address, "Save address and pay", async (data) => {
+    await api("/orders/" + order.id + "/delivery", { method: "PUT", json: data });
+    const pay = await api("/orders/" + order.id + "/pay", { method: "POST" });
+    const url = safeUrl(pay.checkout_url);
+    if (!url) throw new Error("The payment page address was not valid.");
+    window.location.href = url;
+  });
+
+  show(
+    h("h1", {}, "Checkout"),
+    h("div", { class: "cols" },
+      h("div", { class: "card" }, h("h2", {}, "Delivery address"), form),
+      h("div", { class: "card" },
+        h("h2", {}, "Order #" + order.id),
+        order.items.map((i) =>
+          h("div", { class: "row" },
+            h("div", { class: "grow" }, i.product_name + " × " + i.quantity),
+            h("div", { class: "amount" }, money(i.subtotal)))),
+        h("div", { class: "total" }, h("span", {}, "Total"), h("span", {}, money(order.total))),
+        h("p", { class: "muted small" }, "Your items are held for a short time while you pay. You will be taken to Stripe's secure payment page."))
+    )
+  );
+}
+
+// ---------- orders ----------
+async function viewOrders() {
+  if (!requireLogin()) return;
+  const orders = await api("/orders");
+
+  // After paying, the order is confirmed a few seconds later by Stripe.
+  if (state.poll > 0 && orders.some((o) => o.status === "pending_payment")) {
+    state.poll -= 1;
+    setTimeout(() => { if (location.hash === "#/orders") render(); }, 3000);
+  } else {
+    state.poll = 0;
+  }
+
+  show(
+    h("h1", {}, "My orders"),
+    orders.length ? orders.map(orderCard) : h("p", { class: "muted" }, "You have not placed any orders yet.")
+  );
+}
+
+function orderCard(order) {
+  const actions = [];
+  if (order.status === "pending_payment") {
+    actions.push(h("a", { class: "btn primary", href: "#/checkout/" + order.id }, "Pay now"));
+  } else if (order.status !== "cancelled") {
+    actions.push(h("a", { class: "btn", href: "#/track/" + order.id }, "Track order"));
+  }
+  return h("div", { class: "card" },
+    h("div", { class: "order-head" },
+      h("strong", {}, "Order #" + order.id),
+      badge(order.status),
+      h("span", { class: "muted small" }, when(order.created_at)),
+      h("span", { class: "grow" }),
+      h("strong", {}, money(order.total))),
+    h("ul", { class: "items" }, order.items.map((i) => h("li", {}, i.product_name + " × " + i.quantity))),
+    order.status === "cancelled"
+      ? h("p", { class: "muted small" }, "The payment window expired, so the items went back into stock.")
+      : null,
+    h("div", { class: "actions" }, actions)
+  );
+}
+
+// ---------- tracking ----------
+const STEPS = ["order_placed", "shipped", "in_transit", "out_for_delivery", "delivered"];
+
+function stepIndex(deliveryStatus) {
+  const index = STEPS.indexOf(deliveryStatus);
+  return index === -1 ? 0 : index;
+}
+
+async function viewTrack(id) {
+  if (!requireLogin()) return;
+  const d = await api("/orders/" + id + "/delivery");
+  const current = stepIndex(d.delivery_status);
+
+  const stepper = h("ol", { class: "stepper" },
+    STEPS.map((step, index) =>
+      h("li", { class: index <= current ? "done" : "" }, label(step))));
+
+  const trackingUrl = safeUrl(d.tracking_url);
+  const shipment = d.tracking_number
+    ? h("div", { class: "card" },
+        h("h2", {}, "Shipment"),
+        h("p", {}, "Carrier: ", h("strong", {}, d.carrier || "-")),
+        h("p", {}, "Tracking number: ", h("strong", {}, d.tracking_number)),
+        trackingUrl
+          ? h("a", { href: trackingUrl, target: "_blank", rel: "noopener noreferrer" }, "Open the carrier's tracking page")
+          : null,
+        d.delivered_at ? h("p", {}, "Delivered on " + when(d.delivered_at)) : null)
+    : null;
+
+  const timeline = h("ul", { class: "timeline" },
+    d.timeline.slice().reverse().map((event) =>
+      h("li", {},
+        h("strong", {}, label(event.status)),
+        event.location ? " · " + event.location : "",
+        event.note ? h("div", { class: "small" }, event.note) : null,
+        h("div", { class: "muted small" }, when(event.created_at)))));
+
+  const canEdit =
+    (d.order_status === "paid" || d.order_status === "pending_payment") &&
+    (d.delivery_status === "awaiting_address" || d.delivery_status === "processing");
+
+  const addressCard = canEdit
+    ? h("div", { class: "card" },
+        h("h2", {}, d.address ? "Change delivery address" : "Add your delivery address"),
+        addressForm(d.address, "Save address", async (data) => {
+          await api("/orders/" + id + "/delivery", { method: "PUT", json: data });
+          toast("Delivery address saved.", "ok");
+          render();
+        }))
+    : d.address
+      ? h("div", { class: "card" }, h("h2", {}, "Delivering to"), addressLines(d.address))
+      : null;
+
+  show(
+    h("p", {}, h("a", { href: "#/orders" }, "← My orders")),
+    h("h1", {}, "Order #" + d.order_id),
+    h("div", { class: "order-head" }, badge(d.order_status), badge(d.delivery_status)),
+    d.order_status === "pending_payment"
+      ? h("p", { class: "muted" }, "This order is waiting for payment. ", h("a", { href: "#/checkout/" + d.order_id }, "Pay now"))
+      : null,
+    stepper,
+    shipment,
+    h("div", { class: "card" }, h("h2", {}, "Tracking history"), timeline),
+    addressCard
+  );
+}
+
+function addressLines(a) {
+  return h("p", {},
+    a.recipient_name, h("br"),
+    a.address_line1, h("br"),
+    a.address_line2 ? [a.address_line2, h("br")] : null,
+    a.city + ", " + a.state + " " + a.postal_code, h("br"),
+    a.country, h("br"),
+    "Phone: " + a.phone);
+}
+
+// ---------- sign in / register ----------
+async function viewLogin() {
+  if (state.me) { go("#/shop"); return; }
+  let mode = "login";
+  const box = h("div", { class: "card narrow" });
+
+  function draw() {
+    const email = h("input", { id: "email", type: "email", autocomplete: "email", required: true });
+    const password = h("input", {
+      id: "password", type: "password", required: true, minlength: "8", maxlength: "72",
+      autocomplete: mode === "login" ? "current-password" : "new-password",
+    });
+    const submit = h("button", { class: "btn primary", type: "submit" }, mode === "login" ? "Sign in" : "Create account");
+    const form = h("form", { class: "form", onsubmit: async (event) => {
+      event.preventDefault();
+      submit.disabled = true;
+      try {
+        if (mode === "register") {
+          await api("/auth/register", { method: "POST", json: { email: email.value, password: password.value }, auth: false });
+        }
+        const data = await api("/auth/login", { method: "POST", form: { username: email.value, password: password.value }, auth: false });
+        state.token = data.access_token;
+        localStorage.setItem("token", state.token);
+        await loadMe();
+        toast(mode === "login" ? "Welcome back!" : "Your account was created.", "ok");
+        const next = sessionStorage.getItem("next") || "#/shop";
+        sessionStorage.removeItem("next");
+        go(next === "#/login" ? "#/shop" : next);
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        submit.disabled = false;
+      }
+    } },
+      h("label", { class: "field", for: "email" }, h("span", {}, "Email"), email),
+      h("label", { class: "field", for: "password" }, h("span", {}, mode === "login" ? "Password" : "Password (at least 8 characters)"), password),
+      submit);
+    const switcher = h("button", { class: "btn ghost", type: "button", onclick: () => { mode = mode === "login" ? "register" : "login"; draw(); } },
+      mode === "login" ? "New here? Create an account" : "Already have an account? Sign in");
+    box.replaceChildren(h("h1", {}, mode === "login" ? "Sign in" : "Create an account"), form, h("p", {}, switcher));
+  }
+
+  draw();
+  show(box);
+}
+
+// ---------- admin ----------
+async function viewAdmin(tab = "products") {
+  if (!requireLogin()) return;
+  if (!state.me.is_admin) {
+    show(h("h1", {}, "Admin"), h("p", { class: "muted" }, "You need an admin account to open this page."));
+    return;
+  }
+  const tabs = h("div", { class: "tabs" },
+    ["products", "orders"].map((t) =>
+      h("a", { class: "tab" + (t === tab ? " active" : ""), href: "#/admin/" + t }, t === "products" ? "Products" : "Orders")));
+  const body = tab === "orders" ? await adminOrders() : await adminProducts();
+  show(h("h1", {}, "Admin"), tabs, body);
+}
+
+async function adminProducts() {
+  const products = await api("/products", { auth: false });
+
+  const name = h("input", { placeholder: "Name", required: true, "aria-label": "Product name" });
+  const price = h("input", { type: "number", step: "0.01", min: "0", placeholder: "Price", required: true, "aria-label": "Price" });
+  const stock = h("input", { type: "number", step: "1", min: "0", placeholder: "Stock", required: true, "aria-label": "Stock" });
+  const addForm = h("form", { class: "inline-form", onsubmit: async (event) => {
+    event.preventDefault();
+    try {
+      await api("/products", { method: "POST", json: { name: name.value.trim(), price: Number(price.value), stock: parseInt(stock.value, 10) } });
+      toast("Product added.", "ok");
+      render();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  } }, name, price, stock, h("button", { class: "btn primary", type: "submit" }, "Add product"));
+
+  const rows = products.map((p) => {
+    const n = h("input", { value: p.name, "aria-label": "Name" });
+    const pr = h("input", { type: "number", step: "0.01", min: "0", value: String(p.price), "aria-label": "Price" });
+    const st = h("input", { type: "number", step: "1", min: "0", value: String(p.stock), "aria-label": "Stock" });
+    const save = h("button", { class: "btn small", onclick: async () => {
+      try {
+        await api("/products/" + p.id, { method: "PUT", json: { name: n.value.trim(), price: Number(pr.value), stock: parseInt(st.value, 10) } });
+        toast("Saved.", "ok");
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    } }, "Save");
+    const del = h("button", { class: "btn small ghost", onclick: async () => {
+      if (!confirm("Delete " + p.name + "?")) return;
+      try {
+        await api("/products/" + p.id, { method: "DELETE" });
+        toast("Deleted.", "ok");
+        render();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    } }, "Delete");
+    return h("div", { class: "inline-form row" }, h("span", { class: "muted small" }, "#" + p.id), n, pr, st, save, del);
+  });
+
+  return h("div", {},
+    h("div", { class: "card" }, h("h2", {}, "Add a product"), addForm),
+    h("div", { class: "card" }, h("h2", {}, "Products"), rows.length ? rows : h("p", { class: "muted" }, "No products yet.")));
+}
+
+async function adminOrders() {
+  const query = state.adminFilter ? "?status=" + encodeURIComponent(state.adminFilter) : "";
+  const orders = await api("/admin/orders" + query);
+
+  const filter = h("select", { "aria-label": "Filter by status", onchange: () => { state.adminFilter = filter.value; render(); } },
+    [["", "All orders"], ["pending_payment", "Awaiting payment"], ["paid", "Paid"], ["shipped", "Shipped"], ["delivered", "Delivered"], ["cancelled", "Cancelled"]]
+      .map(([value, text]) => h("option", { value, selected: value === state.adminFilter }, text)));
+
+  return h("div", {},
+    h("div", { class: "card" }, h("label", { class: "field" }, h("span", {}, "Show"), filter)),
+    orders.length ? orders.map(adminOrderCard) : h("p", { class: "muted" }, "No orders match."));
+}
+
+function adminOrderCard(order) {
+  const panel = h("div", {});
+  const actions = [];
+
+  const refresh = () => render();
+
+  if (order.status === "paid" && order.delivery_status === "processing") {
+    actions.push(h("button", { class: "btn primary small", onclick: () => panel.replaceChildren(shipForm(order, refresh)) }, "Ship order"));
+  } else if (order.status === "paid" && order.delivery_status === "awaiting_address") {
+    actions.push(h("span", { class: "muted small" }, "Waiting for the customer's delivery address."));
+  } else if (["shipped"].includes(order.status)) {
+    actions.push(h("button", { class: "btn primary small", onclick: () => panel.replaceChildren(trackingForm(order, refresh)) }, "Add tracking update"));
+  }
+  actions.push(h("button", { class: "btn small", onclick: async () => {
+    try {
+      const d = await api("/orders/" + order.id + "/delivery");
+      panel.replaceChildren(h("div", { class: "cols" },
+        h("div", {}, h("h3", {}, "Delivering to"), d.address ? addressLines(d.address) : h("p", { class: "muted" }, "No address yet.")),
+        h("div", {}, h("h3", {}, "History"),
+          h("ul", { class: "timeline" }, d.timeline.slice().reverse().map((e) =>
+            h("li", {}, h("strong", {}, label(e.status)), e.location ? " · " + e.location : "", h("div", { class: "muted small" }, when(e.created_at))))))));
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  } }, "Delivery details"));
+
+  return h("div", { class: "card" },
+    h("div", { class: "order-head" },
+      h("strong", {}, "Order #" + order.id),
+      badge(order.status),
+      badge(order.delivery_status),
+      h("span", { class: "muted small" }, (order.user_email || "unknown customer") + " · " + when(order.created_at)),
+      h("span", { class: "grow" }),
+      h("strong", {}, money(order.total))),
+    h("div", { class: "actions" }, actions),
+    panel);
+}
+
+function shipForm(order, done) {
+  const carrier = h("input", { placeholder: "Carrier", required: true, "aria-label": "Carrier" });
+  const number = h("input", { placeholder: "Tracking number", required: true, minlength: "3", "aria-label": "Tracking number" });
+  const url = h("input", { type: "url", placeholder: "Tracking link (optional)", "aria-label": "Tracking link" });
+  const place = h("input", { placeholder: "Location (optional)", "aria-label": "Location" });
+  return h("form", { class: "inline-form", onsubmit: async (event) => {
+    event.preventDefault();
+    const body = { carrier: carrier.value.trim(), tracking_number: number.value.trim() };
+    if (url.value.trim()) body.tracking_url = url.value.trim();
+    if (place.value.trim()) body.location = place.value.trim();
+    try {
+      await api("/admin/orders/" + order.id + "/ship", { method: "POST", json: body });
+      toast("Order #" + order.id + " marked as shipped.", "ok");
+      done();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  } }, carrier, number, url, place, h("button", { class: "btn primary", type: "submit" }, "Mark as shipped"));
+}
+
+function trackingForm(order, done) {
+  const status = h("select", { "aria-label": "New status" },
+    [["in_transit", "In transit"], ["out_for_delivery", "Out for delivery"], ["delivered", "Delivered"]]
+      .map(([value, text]) => h("option", { value }, text)));
+  const place = h("input", { placeholder: "Location (optional)", "aria-label": "Location" });
+  const note = h("input", { placeholder: "Note (optional)", "aria-label": "Note" });
+  return h("form", { class: "inline-form", onsubmit: async (event) => {
+    event.preventDefault();
+    const body = { status: status.value };
+    if (place.value.trim()) body.location = place.value.trim();
+    if (note.value.trim()) body.note = note.value.trim();
+    try {
+      await api("/admin/orders/" + order.id + "/tracking", { method: "POST", json: body });
+      toast("Tracking updated.", "ok");
+      done();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  } }, status, place, note, h("button", { class: "btn primary", type: "submit" }, "Add update"));
+}
+
+// ---------- start ----------
+async function start() {
+  const params = new URLSearchParams(location.search);
+  const paid = params.get("paid");
+  const cancelled = params.get("cancelled");
+  if (paid || cancelled) {
+    history.replaceState(null, "", location.pathname + "#/orders");
+  } else if (!location.hash) {
+    history.replaceState(null, "", location.pathname + "#/shop");
+  }
+
+  await loadMe();
+  if (paid) {
+    state.poll = 5;
+    toast("Thank you! Your payment was received. Your order will update in a few seconds.", "ok");
+  }
+  if (cancelled) toast("Payment cancelled. Your order is held for a short time.");
+  render();
+}
+
+window.addEventListener("hashchange", render);
+start();
+</script>
+</body>
+</html>
