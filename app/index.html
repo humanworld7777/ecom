@@ -108,6 +108,13 @@
   .toast { padding: .65rem 1rem; border-radius: 8px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(0,0,0,.15); }
   .toast.ok { border-left: 4px solid var(--ok); }
   .toast.error { border-left: 4px solid var(--err); }
+  .photo { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; background: var(--line); display: block; }
+  .thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; flex: none; background: var(--line); }
+  .tile.thumb { font-size: 1.4rem; }
+  .product select { margin: .4rem 0; }
+  .admin-product { display: grid; gap: .5rem; padding: .75rem 0; border-bottom: 1px solid var(--line); }
+  .admin-product:last-child { border-bottom: 0; }
+  .inline-form input[type="file"] { flex: 2 1 200px; }
 </style>
 </head>
 <body>
@@ -204,7 +211,7 @@ function errorText(data, status) {
   return "Something went wrong (" + status + ")";
 }
 
-async function api(path, { method = "GET", json, form, auth = true } = {}) {
+async function api(path, { method = "GET", json, form, formData, auth = true } = {}) {
   const headers = {};
   let body;
   if (json !== undefined) {
@@ -212,6 +219,7 @@ async function api(path, { method = "GET", json, form, auth = true } = {}) {
     body = JSON.stringify(json);
   }
   if (form) body = new URLSearchParams(form);
+  if (formData) body = formData;
   if (auth && state.token) headers["Authorization"] = "Bearer " + state.token;
 
   let res;
@@ -330,33 +338,52 @@ async function viewShop() {
   );
 }
 
+function productImage(p) {
+  const letter = h("div", { class: "tile", "aria-hidden": "true" }, (p.name || "?").trim().charAt(0).toUpperCase());
+  if (!p.image_url) return letter;
+  const img = h("img", { class: "photo", src: p.image_url, alt: p.name, loading: "lazy" });
+  img.addEventListener("error", () => img.replaceWith(letter));
+  return img;
+}
+
 function productCard(p) {
   const soldOut = p.stock <= 0;
+  const sizes = p.sizes || [];
+  const picker = sizes.length
+    ? h("select", { "aria-label": "Size for " + p.name },
+        h("option", { value: "" }, "Select size"),
+        sizes.map((s) => h("option", { value: s.label, disabled: s.stock <= 0 }, s.label + (s.stock <= 0 ? " (sold out)" : ""))))
+    : null;
   const button = h("button", {
     class: "btn primary",
     disabled: soldOut,
-    onclick: () => addToCart(p, button),
+    onclick: () => addToCart(p, button, picker ? picker.value : ""),
   }, soldOut ? "Out of stock" : "Add to cart");
   return h("article", { class: "card product" },
-    h("div", { class: "tile", "aria-hidden": "true" }, (p.name || "?").trim().charAt(0).toUpperCase()),
+    productImage(p),
     h("h3", {}, p.name),
     h("p", { class: "price" }, money(p.price)),
     h("p", { class: "muted small" },
       soldOut ? "Currently unavailable" : p.stock <= 5 ? "Only " + p.stock + " left" : "In stock"),
+    picker,
     button
   );
 }
 
-async function addToCart(product, button) {
+async function addToCart(product, button, size) {
   if (!requireLogin()) return;
+  if ((product.sizes || []).length && !size) {
+    toast("Please choose a size first.", "error");
+    return;
+  }
   button.disabled = true;
   try {
     const cart = await api("/cart/items", {
       method: "POST",
-      json: { product_id: product.id, quantity: 1 },
+      json: { product_id: product.id, quantity: 1, size },
     });
     setCartCount(cart);
-    toast(product.name + " was added to your cart.", "ok");
+    toast(product.name + (size ? " (" + size + ")" : "") + " was added to your cart.", "ok");
   } catch (e) {
     toast(e.message, "error");
   } finally {
@@ -365,6 +392,15 @@ async function addToCart(product, button) {
 }
 
 // ---------- cart ----------
+const sizeQuery = (size) => (size ? "?size=" + encodeURIComponent(size) : "");
+const sizeNote = (size) => (size ? " (size " + size + ")" : "");
+
+function thumb(item) {
+  return item.image_url
+    ? h("img", { class: "thumb", src: item.image_url, alt: "" })
+    : h("div", { class: "tile thumb", "aria-hidden": "true" }, (item.name || "?").trim().charAt(0).toUpperCase());
+}
+
 async function viewCart() {
   if (!requireLogin()) return;
   const cart = await api("/cart");
@@ -381,8 +417,10 @@ async function viewCart() {
 
   const rows = cart.items.map((item) =>
     h("div", { class: "row" },
+      thumb(item),
       h("div", { class: "grow" },
         h("strong", {}, item.name),
+        item.size ? h("div", { class: "small" }, "Size: " + item.size) : null,
         h("div", { class: "muted small" }, money(item.price) + " each")),
       h("div", { class: "qty" },
         h("button", { class: "btn small", "aria-label": "Decrease quantity", onclick: () => changeQuantity(item, item.quantity - 1) }, "-"),
@@ -416,7 +454,7 @@ async function viewCart() {
 async function changeQuantity(item, quantity) {
   if (quantity < 1) return removeItem(item);
   try {
-    await api("/cart/items/" + item.product_id, { method: "PUT", json: { quantity } });
+    await api("/cart/items/" + item.product_id + sizeQuery(item.size), { method: "PUT", json: { quantity } });
     await viewCart();
   } catch (e) {
     toast(e.message, "error");
@@ -425,7 +463,7 @@ async function changeQuantity(item, quantity) {
 
 async function removeItem(item) {
   try {
-    await api("/cart/items/" + item.product_id, { method: "DELETE" });
+    await api("/cart/items/" + item.product_id + sizeQuery(item.size), { method: "DELETE" });
     await viewCart();
   } catch (e) {
     toast(e.message, "error");
@@ -509,7 +547,7 @@ async function viewCheckout(id) {
         h("h2", {}, "Order #" + order.id),
         order.items.map((i) =>
           h("div", { class: "row" },
-            h("div", { class: "grow" }, i.product_name + " × " + i.quantity),
+            h("div", { class: "grow" }, i.product_name + sizeNote(i.size) + " × " + i.quantity),
             h("div", { class: "amount" }, money(i.subtotal)))),
         h("div", { class: "total" }, h("span", {}, "Total"), h("span", {}, money(order.total))),
         h("p", { class: "muted small" }, "Your items are held for a short time while you pay. You will be taken to Stripe's secure payment page."))
@@ -550,7 +588,7 @@ function orderCard(order) {
       h("span", { class: "muted small" }, when(order.created_at)),
       h("span", { class: "grow" }),
       h("strong", {}, money(order.total))),
-    h("ul", { class: "items" }, order.items.map((i) => h("li", {}, i.product_name + " × " + i.quantity))),
+    h("ul", { class: "items" }, order.items.map((i) => h("li", {}, i.product_name + sizeNote(i.size) + " × " + i.quantity))),
     order.status === "cancelled"
       ? h("p", { class: "muted small" }, "The payment window expired, so the items went back into stock.")
       : null,
@@ -695,35 +733,138 @@ async function viewAdmin(tab = "products") {
   show(h("h1", {}, "Admin"), tabs, body);
 }
 
+// "S:10, M:5" -> [{ label: "S", stock: 10 }, { label: "M", stock: 5 }]
+function parseSizes(text) {
+  const result = [];
+  for (const part of text.split(",")) {
+    const bit = part.trim();
+    if (!bit) continue;
+    const [label, stock] = bit.split(":").map((x) => x.trim());
+    const count = stock === undefined || stock === "" ? 0 : Number(stock);
+    if (!label || !Number.isInteger(count) || count < 0) {
+      throw new Error('Could not read "' + bit + '". Write sizes like S:10, M:5, L:0');
+    }
+    result.push({ label, stock: count });
+  }
+  return result;
+}
+
+const sizesText = (p) => (p.sizes || []).map((s) => s.label + ":" + s.stock).join(", ");
+
+// Phone photos are big, so shrink them in the browser before uploading.
+async function shrinkImage(file) {
+  try {
+    if (!file.type.startsWith("image/")) return file;
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    return blob || file;
+  } catch (e) {
+    return file;
+  }
+}
+
+async function uploadImage(productId, file) {
+  const blob = await shrinkImage(file);
+  const data = new FormData();
+  data.append("file", blob, "product.jpg");
+  return api("/products/" + productId + "/image", { method: "POST", formData: data });
+}
+
+const PHOTO_TYPES = "image/jpeg,image/png,image/webp";
+
 async function adminProducts() {
   const products = await api("/products", { auth: false });
 
   const name = h("input", { placeholder: "Name", required: true, "aria-label": "Product name" });
   const price = h("input", { type: "number", step: "0.01", min: "0", placeholder: "Price", required: true, "aria-label": "Price" });
   const stock = h("input", { type: "number", step: "1", min: "0", placeholder: "Stock", required: true, "aria-label": "Stock" });
+  const sizes = h("input", { placeholder: "Sizes and stock, e.g. S:10, M:5 (optional)", "aria-label": "Sizes and stock" });
+  const photo = h("input", { type: "file", accept: PHOTO_TYPES, "aria-label": "Product photo" });
+  sizes.addEventListener("input", () => { stock.disabled = sizes.value.trim() !== ""; });
+
   const addForm = h("form", { class: "inline-form", onsubmit: async (event) => {
     event.preventDefault();
     try {
-      await api("/products", { method: "POST", json: { name: name.value.trim(), price: Number(price.value), stock: parseInt(stock.value, 10) } });
+      const sizeList = parseSizes(sizes.value);
+      const created = await api("/products", { method: "POST", json: {
+        name: name.value.trim(),
+        price: Number(price.value),
+        stock: sizeList.length ? 0 : parseInt(stock.value || "0", 10),
+        sizes: sizeList,
+      } });
+      if (photo.files && photo.files[0]) {
+        try {
+          await uploadImage(created.id, photo.files[0]);
+        } catch (e) {
+          toast("Product added, but the photo failed: " + e.message, "error");
+          render();
+          return;
+        }
+      }
       toast("Product added.", "ok");
       render();
     } catch (e) {
       toast(e.message, "error");
     }
-  } }, name, price, stock, h("button", { class: "btn primary", type: "submit" }, "Add product"));
+  } }, name, price, stock, sizes, photo, h("button", { class: "btn primary", type: "submit" }, "Add product"));
 
   const rows = products.map((p) => {
     const n = h("input", { value: p.name, "aria-label": "Name" });
     const pr = h("input", { type: "number", step: "0.01", min: "0", value: String(p.price), "aria-label": "Price" });
-    const st = h("input", { type: "number", step: "1", min: "0", value: String(p.stock), "aria-label": "Stock" });
+    const hasSizes = (p.sizes || []).length > 0;
+    const st = h("input", { type: "number", step: "1", min: "0", value: String(hasSizes ? 0 : p.stock), disabled: hasSizes, "aria-label": "Stock" });
+    const sz = h("input", { value: sizesText(p), placeholder: "Sizes e.g. S:10, M:5", "aria-label": "Sizes and stock" });
+    sz.addEventListener("input", () => { st.disabled = sz.value.trim() !== ""; });
+    const file = h("input", { type: "file", accept: PHOTO_TYPES, "aria-label": "New photo" });
+
     const save = h("button", { class: "btn small", onclick: async () => {
       try {
-        await api("/products/" + p.id, { method: "PUT", json: { name: n.value.trim(), price: Number(pr.value), stock: parseInt(st.value, 10) } });
+        const sizeList = parseSizes(sz.value);
+        await api("/products/" + p.id, { method: "PUT", json: {
+          name: n.value.trim(),
+          price: Number(pr.value),
+          stock: sizeList.length ? 0 : parseInt(st.value || "0", 10),
+          sizes: sizeList,
+        } });
         toast("Saved.", "ok");
+        render();
       } catch (e) {
         toast(e.message, "error");
       }
     } }, "Save");
+
+    const upload = h("button", { class: "btn small", onclick: async () => {
+      const chosen = file.files && file.files[0];
+      if (!chosen) { toast("Choose a photo first.", "error"); return; }
+      try {
+        await uploadImage(p.id, chosen);
+        toast("Photo saved.", "ok");
+        render();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    } }, p.image_url ? "Replace photo" : "Upload photo");
+
+    const removePhoto = p.image_url
+      ? h("button", { class: "btn small ghost", onclick: async () => {
+          try {
+            await api("/products/" + p.id + "/image", { method: "DELETE" });
+            toast("Photo removed.", "ok");
+            render();
+          } catch (e) {
+            toast(e.message, "error");
+          }
+        } }, "Remove photo")
+      : null;
+
     const del = h("button", { class: "btn small ghost", onclick: async () => {
       if (!confirm("Delete " + p.name + "?")) return;
       try {
@@ -734,11 +875,16 @@ async function adminProducts() {
         toast(e.message, "error");
       }
     } }, "Delete");
-    return h("div", { class: "inline-form row" }, h("span", { class: "muted small" }, "#" + p.id), n, pr, st, save, del);
+
+    return h("div", { class: "admin-product" },
+      h("div", { class: "inline-form" }, thumb({ image_url: p.image_url, name: p.name }), h("span", { class: "muted small" }, "#" + p.id), n, pr, st, sz),
+      h("div", { class: "inline-form" }, save, file, upload, removePhoto, del));
   });
 
   return h("div", {},
-    h("div", { class: "card" }, h("h2", {}, "Add a product"), addForm),
+    h("div", { class: "card" }, h("h2", {}, "Add a product"),
+      h("p", { class: "muted small" }, "For clothes, write the sizes with their stock, like S:10, M:5, L:0. Leave sizes empty for products without sizes."),
+      addForm),
     h("div", { class: "card" }, h("h2", {}, "Products"), rows.length ? rows : h("p", { class: "muted" }, "No products yet.")));
 }
 
