@@ -2,6 +2,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .auth import require_admin
@@ -9,15 +10,16 @@ from .database import get_db
 from .models import (
     CartItemDB,
     ProductDB,
-    ProductImageDB,
+    ProductPhotoDB,
     ProductSizeDB,
+    ReviewDB,
     UserDB,
-    utcnow,
 )
 
 router = APIRouter()
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
+MAX_PHOTOS = 8
 
 
 # ---------- Schemas ----------
@@ -39,8 +41,14 @@ class SizeOut(BaseModel):
     stock: int
 
 
+class PhotoOut(BaseModel):
+    id: int
+    url: str
+
+
 class ProductIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
     price: float = Field(ge=0)
     # Used only when the product has no sizes
     stock: int = Field(default=0, ge=0)
@@ -57,18 +65,34 @@ class ProductIn(BaseModel):
 class ProductOut(BaseModel):
     id: int
     name: str
+    description: str
     price: float
     # Total available. For a product with sizes this is the sum of its sizes.
     stock: int
     sizes: list[SizeOut]
+    # The main photo, and all photos in order (the main one first)
     image_url: str | None
+    images: list[PhotoOut]
+    rating_average: float | None
+    rating_count: int
 
 
 # ---------- Helpers ----------
-def image_url(product_id: int, stamp) -> str | None:
-    if stamp is None:
-        return None
-    return f"/products/{product_id}/image?v={int(stamp.timestamp())}"
+def photo_url(photo_id: int) -> str:
+    return f"/photos/{photo_id}"
+
+
+def main_photo_urls(db: Session, product_ids: list[int]) -> dict[int, str]:
+    """The URL of each product's main photo (the one with the lowest position)."""
+    rows = (
+        db.query(ProductPhotoDB.product_id, ProductPhotoDB.id)
+        .filter(ProductPhotoDB.product_id.in_(product_ids))
+        .order_by(ProductPhotoDB.product_id, ProductPhotoDB.position, ProductPhotoDB.id)
+    )
+    urls: dict[int, str] = {}
+    for product_id, photo_id in rows:
+        urls.setdefault(product_id, photo_url(photo_id))
+    return urls
 
 
 def products_out(db: Session, products: list[ProductDB]) -> list[ProductOut]:
@@ -82,26 +106,41 @@ def products_out(db: Session, products: list[ProductDB]) -> list[ProductOut]:
     ):
         sizes[size.product_id].append(SizeOut(label=size.label, stock=size.stock))
 
-    # Only the timestamps are read here, not the pictures themselves
-    stamps = {
-        row.product_id: row.updated_at
-        for row in db.query(ProductImageDB.product_id, ProductImageDB.updated_at).filter(
-            ProductImageDB.product_id.in_(ids)
-        )
-    }
+    # Only the ids are read here, not the photos themselves
+    photos = defaultdict(list)
+    for product_id, photo_id in (
+        db.query(ProductPhotoDB.product_id, ProductPhotoDB.id)
+        .filter(ProductPhotoDB.product_id.in_(ids))
+        .order_by(ProductPhotoDB.position, ProductPhotoDB.id)
+    ):
+        photos[product_id].append(PhotoOut(id=photo_id, url=photo_url(photo_id)))
+
+    ratings = {}
+    for product_id, total, count in (
+        db.query(ReviewDB.product_id, func.sum(ReviewDB.rating), func.count(ReviewDB.id))
+        .filter(ReviewDB.product_id.in_(ids))
+        .group_by(ReviewDB.product_id)
+    ):
+        ratings[product_id] = (round(float(total) / count, 1), count)
 
     result = []
     for product in products:
         product_sizes = sizes.get(product.id, [])
+        product_photos = photos.get(product.id, [])
+        average, count = ratings.get(product.id, (None, 0))
         total = sum(s.stock for s in product_sizes) if product_sizes else product.stock
         result.append(
             ProductOut(
                 id=product.id,
                 name=product.name,
+                description=product.description or "",
                 price=product.price,
                 stock=total,
                 sizes=product_sizes,
-                image_url=image_url(product.id, stamps.get(product.id)),
+                image_url=product_photos[0].url if product_photos else None,
+                images=product_photos,
+                rating_average=average,
+                rating_count=count,
             )
         )
     return result
@@ -131,6 +170,13 @@ def get_product_or_404(db: Session, product_id: int) -> ProductDB:
     return product
 
 
+def get_photo_or_404(db: Session, product_id: int, photo_id: int) -> ProductPhotoDB:
+    photo = db.get(ProductPhotoDB, photo_id)
+    if not photo or photo.product_id != product_id:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return photo
+
+
 # ---------- Products ----------
 @router.get("/products", response_model=list[ProductOut], tags=["products"])
 def list_products(db: Session = Depends(get_db)):
@@ -154,6 +200,7 @@ def create_product(
 ):
     product = ProductDB(
         name=body.name.strip(),
+        description=body.description.strip(),
         price=body.price,
         stock=sum(s.stock for s in body.sizes) if body.sizes else body.stock,
     )
@@ -174,6 +221,7 @@ def update_product(
 ):
     product = get_product_or_404(db, product_id)
     product.name = body.name.strip()
+    product.description = body.description.strip()
     product.price = body.price
     product.stock = sum(s.stock for s in body.sizes) if body.sizes else body.stock
     replace_sizes(db, product.id, body.sizes)
@@ -190,41 +238,52 @@ def delete_product(
 ):
     product = db.get(ProductDB, product_id)
     if product:
-        db.query(CartItemDB).filter(CartItemDB.product_id == product_id).delete()
-        db.query(ProductSizeDB).filter(ProductSizeDB.product_id == product_id).delete()
-        db.query(ProductImageDB).filter(
-            ProductImageDB.product_id == product_id
-        ).delete()
+        for model in (CartItemDB, ProductSizeDB, ProductPhotoDB, ReviewDB):
+            db.query(model).filter(model.product_id == product_id).delete()
         db.delete(product)
         db.commit()
 
 
-# ---------- Product photo ----------
-@router.get("/products/{product_id}/image", tags=["products"])
-def product_image(product_id: int, db: Session = Depends(get_db)):
-    image = db.get(ProductImageDB, product_id)
-    if not image:
-        raise HTTPException(status_code=404, detail="This product has no photo")
+# ---------- Photos ----------
+@router.get("/photos/{photo_id}", tags=["products"])
+def get_photo(photo_id: int, db: Session = Depends(get_db)):
+    photo = db.get(ProductPhotoDB, photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
     return Response(
-        content=bytes(image.data),
-        media_type=image.content_type,
+        content=bytes(photo.data),
+        media_type=photo.content_type,
         headers={
-            "Cache-Control": "public, max-age=86400",
+            # A photo never changes: a new upload gets a new id
+            "Cache-Control": "public, max-age=31536000, immutable",
             "X-Content-Type-Options": "nosniff",
         },
     )
 
 
 @router.post(
-    "/products/{product_id}/image", response_model=ProductOut, tags=["products"]
+    "/products/{product_id}/photos",
+    response_model=ProductOut,
+    status_code=201,
+    tags=["products"],
 )
-async def upload_product_image(
+async def add_photo(
     product_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     admin: UserDB = Depends(require_admin),
 ):
     product = get_product_or_404(db, product_id)
+
+    count = (
+        db.query(func.count(ProductPhotoDB.id))
+        .filter(ProductPhotoDB.product_id == product_id)
+        .scalar()
+    )
+    if count >= MAX_PHOTOS:
+        raise HTTPException(
+            status_code=400, detail=f"A product can have at most {MAX_PHOTOS} photos"
+        )
 
     data = await file.read(MAX_IMAGE_BYTES + 1)
     if len(data) > MAX_IMAGE_BYTES:
@@ -235,28 +294,59 @@ async def upload_product_image(
             status_code=400, detail="Please upload a JPEG, PNG or WebP photo"
         )
 
-    image = db.get(ProductImageDB, product_id)
-    if image:
-        image.content_type = content_type
-        image.data = data
-        image.updated_at = utcnow()
-    else:
-        db.add(
-            ProductImageDB(product_id=product_id, content_type=content_type, data=data)
+    last = (
+        db.query(func.max(ProductPhotoDB.position))
+        .filter(ProductPhotoDB.product_id == product_id)
+        .scalar()
+    )
+    db.add(
+        ProductPhotoDB(
+            product_id=product_id,
+            content_type=content_type,
+            data=data,
+            position=0 if last is None else last + 1,
         )
+    )
     db.commit()
     return products_out(db, [product])[0]
 
 
 @router.delete(
-    "/products/{product_id}/image", response_model=ProductOut, tags=["products"]
+    "/products/{product_id}/photos/{photo_id}",
+    response_model=ProductOut,
+    tags=["products"],
 )
-def delete_product_image(
+def delete_photo(
     product_id: int,
+    photo_id: int,
     db: Session = Depends(get_db),
     admin: UserDB = Depends(require_admin),
 ):
     product = get_product_or_404(db, product_id)
-    db.query(ProductImageDB).filter(ProductImageDB.product_id == product_id).delete()
+    photo = get_photo_or_404(db, product_id, photo_id)
+    db.delete(photo)
+    db.commit()
+    return products_out(db, [product])[0]
+
+
+@router.post(
+    "/products/{product_id}/photos/{photo_id}/main",
+    response_model=ProductOut,
+    tags=["products"],
+)
+def make_main_photo(
+    product_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    admin: UserDB = Depends(require_admin),
+):
+    product = get_product_or_404(db, product_id)
+    photo = get_photo_or_404(db, product_id, photo_id)
+    lowest = (
+        db.query(func.min(ProductPhotoDB.position))
+        .filter(ProductPhotoDB.product_id == product_id)
+        .scalar()
+    )
+    photo.position = (lowest if lowest is not None else 0) - 1
     db.commit()
     return products_out(db, [product])[0]
