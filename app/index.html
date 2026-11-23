@@ -115,6 +115,48 @@
   .admin-product { display: grid; gap: .5rem; padding: .75rem 0; border-bottom: 1px solid var(--line); }
   .admin-product:last-child { border-bottom: 0; }
   .inline-form input[type="file"] { flex: 2 1 200px; }
+  .plain { color: inherit; text-decoration: none; }
+  .stars { color: #f5a524; letter-spacing: 1px; }
+  .stars .off { color: var(--line); }
+  .rating { margin: 0; }
+  .controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+  .controls input[type="search"] { flex: 2 1 220px; width: auto; }
+  .controls select { flex: 1 1 160px; width: auto; }
+  .check { display: flex; gap: .4rem; align-items: center; font-size: .9rem; }
+  .check input { width: auto; }
+  .detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; align-items: start; }
+  .photo.big { height: auto; max-height: 480px; aspect-ratio: 1 / 1; cursor: zoom-in; }
+  .tile.big { height: 320px; font-size: 5rem; }
+  .thumbs, .photo-bar { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+  .thumb.pick { cursor: pointer; border: 2px solid transparent; }
+  .thumb.pick.on { border-color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 1rem; }
+  .chip { font: inherit; padding: .35rem .85rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+  .chip.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .chip:disabled { opacity: .45; text-decoration: line-through; cursor: not-allowed; }
+  .desc { white-space: pre-line; }
+  .summary { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; }
+  .big-score { font-size: 2.4rem; font-weight: 700; line-height: 1; }
+  .bars { flex: 1 1 220px; display: grid; gap: .25rem; }
+  .bar-row { display: grid; grid-template-columns: 2.4rem 1fr 2rem; gap: .5rem; align-items: center; font-size: .85rem; }
+  .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .fill { height: 100%; background: #f5a524; }
+  .star-picker { display: flex; gap: .1rem; }
+  .star-btn { font-size: 1.7rem; background: none; border: 0; cursor: pointer; color: var(--line); padding: 0 .1rem; }
+  .star-btn.on { color: #f5a524; }
+  textarea { font: inherit; padding: .5rem .65rem; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 100%; resize: vertical; }
+  .review { padding: .75rem 0; border-bottom: 1px solid var(--line); }
+  .review:last-child { border-bottom: 0; }
+  .review p { margin: .25rem 0 0; white-space: pre-line; }
+  .photo-item { display: grid; gap: .25rem; justify-items: center; }
+  .lightbox { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.88); display: grid; place-items: center; overflow: hidden; }
+  .lb-img { max-width: 92vw; max-height: 84vh; cursor: zoom-in; transition: transform .15s; }
+  .lb-img.zoomed { transform: scale(2.2); cursor: zoom-out; }
+  .lb-btn { position: absolute; background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 999px; width: 44px; height: 44px; font-size: 1.6rem; cursor: pointer; }
+  .lb-close { top: 1rem; right: 1rem; }
+  .lb-prev { left: 1rem; top: 50%; }
+  .lb-next { right: 1rem; top: 50%; }
+  .lb-count { position: absolute; bottom: 1rem; color: #fff; font-size: .9rem; }
 </style>
 </head>
 <body>
@@ -308,6 +350,7 @@ async function render() {
   show(h("p", { class: "muted" }, "Loading…"));
   const views = {
     shop: viewShop,
+    product: viewProduct,
     cart: viewCart,
     orders: viewOrders,
     track: viewTrack,
@@ -328,14 +371,66 @@ async function render() {
 }
 
 // ---------- shop ----------
+const shopState = { q: "", sort: "newest", inStock: false };
+
+const SORTS = {
+  newest: (a, b) => b.id - a.id,
+  price_asc: (a, b) => a.price - b.price,
+  price_desc: (a, b) => b.price - a.price,
+  rating: (a, b) => (b.rating_average || 0) - (a.rating_average || 0) || b.rating_count - a.rating_count,
+};
+
+function stars(value) {
+  const filled = Math.max(0, Math.min(5, Math.round(value || 0)));
+  return h("span", { class: "stars", role: "img", "aria-label": (value ? value.toFixed(1) : "No") + " out of 5 stars" },
+    "★".repeat(filled), h("span", { class: "off" }, "★".repeat(5 - filled)));
+}
+
+function ratingLine(p) {
+  return p.rating_count
+    ? h("p", { class: "small rating" }, stars(p.rating_average), " " + p.rating_average.toFixed(1), h("span", { class: "muted" }, " (" + p.rating_count + ")"))
+    : h("p", { class: "muted small" }, "No reviews yet");
+}
+
 async function viewShop() {
   const products = await api("/products", { auth: false });
+  if (!products.length) {
+    show(h("h1", {}, "Shop"), h("p", { class: "muted" }, "No products yet. Please check back soon."));
+    return;
+  }
+
+  const search = h("input", { type: "search", placeholder: "Search products", value: shopState.q, "aria-label": "Search products" });
+  const sort = h("select", { "aria-label": "Sort products" },
+    [["newest", "Newest"], ["price_asc", "Price: low to high"], ["price_desc", "Price: high to low"], ["rating", "Top rated"]]
+      .map(([value, text]) => h("option", { value, selected: value === shopState.sort }, text)));
+  const stockOnly = h("input", { type: "checkbox", checked: shopState.inStock });
+  const count = h("p", { class: "muted small" });
+  const results = h("div", {});
+
+  function draw() {
+    const q = shopState.q.trim().toLowerCase();
+    let list = products.filter((p) => !q || (p.name + " " + (p.description || "")).toLowerCase().includes(q));
+    if (shopState.inStock) list = list.filter((p) => p.stock > 0);
+    list.sort(SORTS[shopState.sort] || SORTS.newest);
+    count.replaceChildren(document.createTextNode(list.length + (list.length === 1 ? " product" : " products")));
+    results.replaceChildren(
+      list.length
+        ? h("div", { class: "grid" }, list.map(productCard))
+        : h("p", { class: "muted" }, "No products match your search."));
+  }
+
+  search.addEventListener("input", () => { shopState.q = search.value; draw(); });
+  sort.addEventListener("change", () => { shopState.sort = sort.value; draw(); });
+  stockOnly.addEventListener("change", () => { shopState.inStock = stockOnly.checked; draw(); });
+
   show(
     h("h1", {}, "Shop"),
-    products.length
-      ? h("div", { class: "grid" }, products.map(productCard))
-      : h("p", { class: "muted" }, "No products yet. Please check back soon.")
+    h("div", { class: "card controls" }, search, sort,
+      h("label", { class: "check" }, stockOnly, "In stock only")),
+    count,
+    results
   );
+  draw();
 }
 
 function productImage(p) {
@@ -357,12 +452,13 @@ function productCard(p) {
   const button = h("button", {
     class: "btn primary",
     disabled: soldOut,
-    onclick: () => addToCart(p, button, picker ? picker.value : ""),
+    onclick: () => addToCart(p, button, picker ? picker.value : "", 1),
   }, soldOut ? "Out of stock" : "Add to cart");
   return h("article", { class: "card product" },
-    productImage(p),
-    h("h3", {}, p.name),
+    h("a", { href: "#/product/" + p.id, "aria-label": "View " + p.name }, productImage(p)),
+    h("h3", {}, h("a", { class: "plain", href: "#/product/" + p.id }, p.name)),
     h("p", { class: "price" }, money(p.price)),
+    ratingLine(p),
     h("p", { class: "muted small" },
       soldOut ? "Currently unavailable" : p.stock <= 5 ? "Only " + p.stock + " left" : "In stock"),
     picker,
@@ -370,7 +466,7 @@ function productCard(p) {
   );
 }
 
-async function addToCart(product, button, size) {
+async function addToCart(product, button, size, quantity = 1) {
   if (!requireLogin()) return;
   if ((product.sizes || []).length && !size) {
     toast("Please choose a size first.", "error");
@@ -380,7 +476,7 @@ async function addToCart(product, button, size) {
   try {
     const cart = await api("/cart/items", {
       method: "POST",
-      json: { product_id: product.id, quantity: 1, size },
+      json: { product_id: product.id, quantity, size },
     });
     setCartCount(cart);
     toast(product.name + (size ? " (" + size + ")" : "") + " was added to your cart.", "ok");
@@ -389,6 +485,227 @@ async function addToCart(product, button, size) {
   } finally {
     button.disabled = false;
   }
+}
+
+// ---------- product page ----------
+async function viewProduct(id) {
+  const [product, reviews] = await Promise.all([
+    api("/products/" + id, { auth: false }),
+    api("/products/" + id + "/reviews", { auth: false }),
+  ]);
+  const mine = state.me ? await api("/products/" + id + "/reviews/mine") : null;
+
+  const sizes = product.sizes || [];
+  const soldOut = product.stock <= 0;
+  let chosen = "";
+  let quantity = 1;
+
+  const chips = sizes.map((s) => {
+    const chip = h("button", {
+      type: "button", class: "chip", disabled: s.stock <= 0, "aria-pressed": "false",
+      onclick: () => {
+        chosen = s.label;
+        chips.forEach((c) => {
+          c.className = "chip" + (c === chip ? " on" : "");
+          c.setAttribute("aria-pressed", c === chip ? "true" : "false");
+        });
+      },
+    }, s.label + (s.stock <= 0 ? " (sold out)" : ""));
+    return chip;
+  });
+
+  const qtyValue = h("span", {}, "1");
+  const setQty = (n) => {
+    quantity = Math.max(1, Math.min(20, n));
+    qtyValue.replaceChildren(document.createTextNode(String(quantity)));
+  };
+  const add = h("button", { class: "btn primary", disabled: soldOut, onclick: () => addToCart(product, add, chosen, quantity) },
+    soldOut ? "Out of stock" : "Add to cart");
+
+  const info = h("div", {},
+    h("h1", {}, product.name),
+    ratingLine(product),
+    h("p", { class: "price big-price" }, money(product.price)),
+    product.description ? h("p", { class: "desc" }, product.description) : null,
+    sizes.length ? h("div", {}, h("strong", {}, "Size"), h("div", { class: "chips" }, chips)) : null,
+    h("div", { class: "qty" },
+      h("button", { class: "btn small", "aria-label": "Decrease quantity", onclick: () => setQty(quantity - 1) }, "-"),
+      qtyValue,
+      h("button", { class: "btn small", "aria-label": "Increase quantity", onclick: () => setQty(quantity + 1) }, "+")),
+    h("p", { class: "muted small" },
+      soldOut ? "Currently unavailable" : product.stock <= 5 ? "Only " + product.stock + " left" : "In stock"),
+    add);
+
+  show(
+    h("p", {}, h("a", { href: "#/shop" }, "← Back to shop")),
+    h("div", { class: "detail" }, gallery(product), info),
+    reviewsSection(product, reviews, mine)
+  );
+}
+
+function gallery(product) {
+  const images = product.images || [];
+  if (!images.length) {
+    return h("div", { class: "tile big", "aria-hidden": "true" }, (product.name || "?").trim().charAt(0).toUpperCase());
+  }
+  let index = 0;
+  const main = h("img", { class: "photo big", src: images[0].url, alt: product.name, tabindex: "0", title: "Click to enlarge" });
+  const thumbs = images.map((image, i) =>
+    h("img", {
+      class: "thumb pick" + (i === 0 ? " on" : ""), src: image.url,
+      alt: "Photo " + (i + 1) + " of " + product.name, onclick: () => select(i),
+    }));
+
+  function select(i) {
+    index = i;
+    main.setAttribute("src", images[i].url);
+    thumbs.forEach((t, j) => { t.className = "thumb pick" + (j === i ? " on" : ""); });
+  }
+
+  main.addEventListener("click", () => openLightbox(images, index, product.name));
+  main.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLightbox(images, index, product.name); }
+  });
+  return h("div", {}, main, images.length > 1 ? h("div", { class: "thumbs" }, thumbs) : null);
+}
+
+// Full-screen viewer: arrows or arrow keys to browse, click the photo to zoom, Esc to close.
+function openLightbox(images, start, title) {
+  let index = start;
+  const img = h("img", { class: "lb-img", alt: title });
+  const counter = h("div", { class: "lb-count" });
+  const overlay = h("div", { class: "lightbox", role: "dialog", "aria-modal": "true", "aria-label": title + " photos" });
+
+  function showPhoto(i) {
+    index = (i + images.length) % images.length;
+    img.setAttribute("src", images[index].url);
+    img.className = "lb-img";
+    img.style.transformOrigin = "";
+    counter.replaceChildren(document.createTextNode(images.length > 1 ? (index + 1) + " / " + images.length : ""));
+  }
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey);
+  }
+  function onKey(e) {
+    if (e.key === "Escape") close();
+    else if (e.key === "ArrowRight" && images.length > 1) showPhoto(index + 1);
+    else if (e.key === "ArrowLeft" && images.length > 1) showPhoto(index - 1);
+  }
+
+  img.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (img.className.includes("zoomed")) {
+      img.className = "lb-img";
+      img.style.transformOrigin = "";
+    } else {
+      const box = img.getBoundingClientRect();
+      img.style.transformOrigin = ((e.clientX - box.left) / box.width * 100) + "% " + ((e.clientY - box.top) / box.height * 100) + "%";
+      img.className = "lb-img zoomed";
+    }
+  });
+  overlay.addEventListener("click", close);
+
+  overlay.append(
+    img,
+    counter,
+    h("button", { class: "lb-btn lb-close", "aria-label": "Close", onclick: (e) => { e.stopPropagation(); close(); } }, "×"),
+    images.length > 1 ? h("button", { class: "lb-btn lb-prev", "aria-label": "Previous photo", onclick: (e) => { e.stopPropagation(); showPhoto(index - 1); } }, "‹") : null,
+    images.length > 1 ? h("button", { class: "lb-btn lb-next", "aria-label": "Next photo", onclick: (e) => { e.stopPropagation(); showPhoto(index + 1); } }, "›") : null
+  );
+  showPhoto(index);
+  document.addEventListener("keydown", onKey);
+  document.body.append(overlay);
+}
+
+// ---------- reviews ----------
+function reviewsSection(product, data, mine) {
+  const summary = h("div", { class: "summary" },
+    data.count
+      ? h("div", {}, h("div", { class: "big-score" }, data.average.toFixed(1)), stars(data.average), h("div", { class: "muted small" }, data.count + (data.count === 1 ? " review" : " reviews")))
+      : h("p", { class: "muted" }, "No reviews yet."),
+    data.count
+      ? h("div", { class: "bars" }, [5, 4, 3, 2, 1].map((n) => {
+          const amount = data.breakdown[String(n)] || 0;
+          return h("div", { class: "bar-row" },
+            h("span", {}, n + " ★"),
+            h("div", { class: "bar" }, h("div", { class: "fill", style: "width:" + (amount / data.count * 100) + "%" })),
+            h("span", { class: "muted" }, String(amount)));
+        }))
+      : null);
+
+  let writer;
+  if (!state.me) {
+    writer = h("p", { class: "muted" }, h("a", { href: "#/login", onclick: () => sessionStorage.setItem("next", "#/product/" + product.id) }, "Sign in"), " to review products you have bought.");
+  } else if (!mine || !mine.can_review) {
+    writer = h("p", { class: "muted" }, "Only customers who bought this product can review it.");
+  } else {
+    writer = reviewForm(product, mine.review);
+  }
+
+  const list = data.reviews.map((r) =>
+    h("div", { class: "review" },
+      h("div", {}, stars(r.rating), " ", h("strong", {}, r.reviewer), h("span", { class: "muted small" }, " · Verified buyer · " + when(r.created_at))),
+      r.comment ? h("p", {}, r.comment) : null,
+      state.me && state.me.is_admin
+        ? h("button", { class: "btn small ghost", onclick: async () => {
+            if (!confirm("Delete this review?")) return;
+            try {
+              await api("/reviews/" + r.id, { method: "DELETE" });
+              toast("Review deleted.", "ok");
+              render();
+            } catch (e) {
+              toast(e.message, "error");
+            }
+          } }, "Delete review")
+        : null));
+
+  return h("div", {},
+    h("div", { class: "card" }, h("h2", {}, "Customer reviews"), summary),
+    h("div", { class: "card" }, h("h2", {}, mine && mine.review ? "Your review" : "Write a review"), writer),
+    list.length ? h("div", { class: "card" }, list) : null);
+}
+
+function reviewForm(product, existing) {
+  let rating = existing ? existing.rating : 0;
+  const picker = h("div", { class: "star-picker", role: "group", "aria-label": "Your rating" });
+  function drawStars() {
+    picker.replaceChildren(...[1, 2, 3, 4, 5].map((n) =>
+      h("button", {
+        type: "button", class: "star-btn" + (n <= rating ? " on" : ""),
+        "aria-label": "Rate " + n + (n === 1 ? " star" : " stars"), "aria-pressed": String(n === rating),
+        onclick: () => { rating = n; drawStars(); },
+      }, "★")));
+  }
+  drawStars();
+
+  const comment = h("textarea", { rows: "3", maxlength: "1000", placeholder: "Share what you liked or did not like (optional)", "aria-label": "Your review" }, existing ? existing.comment : "");
+  const submit = h("button", { class: "btn primary", type: "submit" }, existing ? "Update review" : "Post review");
+  const remove = existing
+    ? h("button", { class: "btn ghost", type: "button", onclick: async () => {
+        try {
+          await api("/products/" + product.id + "/reviews/mine", { method: "DELETE" });
+          toast("Your review was deleted.", "ok");
+          render();
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      } }, "Delete my review")
+    : null;
+
+  return h("form", { class: "form", onsubmit: async (event) => {
+    event.preventDefault();
+    if (!rating) { toast("Choose a star rating first.", "error"); return; }
+    submit.disabled = true;
+    try {
+      await api("/products/" + product.id + "/reviews", { method: "PUT", json: { rating, comment: comment.value.trim() } });
+      toast("Thank you for your review!", "ok");
+      render();
+    } catch (e) {
+      toast(e.message, "error");
+      submit.disabled = false;
+    }
+  } }, picker, comment, h("div", { class: "actions" }, submit, remove));
 }
 
 // ---------- cart ----------
@@ -419,7 +736,7 @@ async function viewCart() {
     h("div", { class: "row" },
       thumb(item),
       h("div", { class: "grow" },
-        h("strong", {}, item.name),
+        h("a", { class: "plain", href: "#/product/" + item.product_id }, h("strong", {}, item.name)),
         item.size ? h("div", { class: "small" }, "Size: " + item.size) : null,
         h("div", { class: "muted small" }, money(item.price) + " each")),
       h("div", { class: "qty" },
@@ -771,11 +1088,20 @@ async function shrinkImage(file) {
   }
 }
 
-async function uploadImage(productId, file) {
+async function uploadPhoto(productId, file) {
   const blob = await shrinkImage(file);
   const data = new FormData();
   data.append("file", blob, "product.jpg");
-  return api("/products/" + productId + "/image", { method: "POST", formData: data });
+  return api("/products/" + productId + "/photos", { method: "POST", formData: data });
+}
+
+async function uploadPhotos(productId, files) {
+  let done = 0;
+  for (const file of Array.from(files)) {
+    await uploadPhoto(productId, file);
+    done += 1;
+  }
+  return done;
 }
 
 const PHOTO_TYPES = "image/jpeg,image/png,image/webp";
@@ -787,24 +1113,26 @@ async function adminProducts() {
   const price = h("input", { type: "number", step: "0.01", min: "0", placeholder: "Price", required: true, "aria-label": "Price" });
   const stock = h("input", { type: "number", step: "1", min: "0", placeholder: "Stock", required: true, "aria-label": "Stock" });
   const sizes = h("input", { placeholder: "Sizes and stock, e.g. S:10, M:5 (optional)", "aria-label": "Sizes and stock" });
-  const photo = h("input", { type: "file", accept: PHOTO_TYPES, "aria-label": "Product photo" });
+  const description = h("textarea", { rows: "3", maxlength: "2000", placeholder: "Description (optional)", "aria-label": "Description" });
+  const photos = h("input", { type: "file", multiple: true, accept: PHOTO_TYPES, "aria-label": "Product photos" });
   sizes.addEventListener("input", () => { stock.disabled = sizes.value.trim() !== ""; });
 
-  const addForm = h("form", { class: "inline-form", onsubmit: async (event) => {
+  const addForm = h("form", { class: "form", onsubmit: async (event) => {
     event.preventDefault();
     try {
       const sizeList = parseSizes(sizes.value);
       const created = await api("/products", { method: "POST", json: {
         name: name.value.trim(),
+        description: description.value.trim(),
         price: Number(price.value),
         stock: sizeList.length ? 0 : parseInt(stock.value || "0", 10),
         sizes: sizeList,
       } });
-      if (photo.files && photo.files[0]) {
+      if (photos.files && photos.files.length) {
         try {
-          await uploadImage(created.id, photo.files[0]);
+          await uploadPhotos(created.id, photos.files);
         } catch (e) {
-          toast("Product added, but the photo failed: " + e.message, "error");
+          toast("Product added, but a photo failed: " + e.message, "error");
           render();
           return;
         }
@@ -814,7 +1142,10 @@ async function adminProducts() {
     } catch (e) {
       toast(e.message, "error");
     }
-  } }, name, price, stock, sizes, photo, h("button", { class: "btn primary", type: "submit" }, "Add product"));
+  } },
+    h("div", { class: "inline-form" }, name, price, stock, sizes),
+    description,
+    h("div", { class: "inline-form" }, photos, h("button", { class: "btn primary", type: "submit" }, "Add product")));
 
   const rows = products.map((p) => {
     const n = h("input", { value: p.name, "aria-label": "Name" });
@@ -823,13 +1154,14 @@ async function adminProducts() {
     const st = h("input", { type: "number", step: "1", min: "0", value: String(hasSizes ? 0 : p.stock), disabled: hasSizes, "aria-label": "Stock" });
     const sz = h("input", { value: sizesText(p), placeholder: "Sizes e.g. S:10, M:5", "aria-label": "Sizes and stock" });
     sz.addEventListener("input", () => { st.disabled = sz.value.trim() !== ""; });
-    const file = h("input", { type: "file", accept: PHOTO_TYPES, "aria-label": "New photo" });
+    const desc = h("textarea", { rows: "2", maxlength: "2000", placeholder: "Description", "aria-label": "Description" }, p.description || "");
 
     const save = h("button", { class: "btn small", onclick: async () => {
       try {
         const sizeList = parseSizes(sz.value);
         await api("/products/" + p.id, { method: "PUT", json: {
           name: n.value.trim(),
+          description: desc.value.trim(),
           price: Number(pr.value),
           stock: sizeList.length ? 0 : parseInt(st.value || "0", 10),
           sizes: sizeList,
@@ -841,30 +1173,6 @@ async function adminProducts() {
       }
     } }, "Save");
 
-    const upload = h("button", { class: "btn small", onclick: async () => {
-      const chosen = file.files && file.files[0];
-      if (!chosen) { toast("Choose a photo first.", "error"); return; }
-      try {
-        await uploadImage(p.id, chosen);
-        toast("Photo saved.", "ok");
-        render();
-      } catch (e) {
-        toast(e.message, "error");
-      }
-    } }, p.image_url ? "Replace photo" : "Upload photo");
-
-    const removePhoto = p.image_url
-      ? h("button", { class: "btn small ghost", onclick: async () => {
-          try {
-            await api("/products/" + p.id + "/image", { method: "DELETE" });
-            toast("Photo removed.", "ok");
-            render();
-          } catch (e) {
-            toast(e.message, "error");
-          }
-        } }, "Remove photo")
-      : null;
-
     const del = h("button", { class: "btn small ghost", onclick: async () => {
       if (!confirm("Delete " + p.name + "?")) return;
       try {
@@ -874,16 +1182,56 @@ async function adminProducts() {
       } catch (e) {
         toast(e.message, "error");
       }
-    } }, "Delete");
+    } }, "Delete product");
+
+    const images = p.images || [];
+    const photoBar = h("div", { class: "photo-bar" }, images.map((image, i) =>
+      h("div", { class: "photo-item" },
+        h("img", { class: "thumb", src: image.url, alt: "Photo " + (i + 1) + " of " + p.name }),
+        i === 0
+          ? h("span", { class: "badge s-paid" }, "Main")
+          : h("button", { class: "btn small", onclick: async () => {
+              try {
+                await api("/products/" + p.id + "/photos/" + image.id + "/main", { method: "POST" });
+                render();
+              } catch (e) {
+                toast(e.message, "error");
+              }
+            } }, "Make main"),
+        h("button", { class: "btn small ghost", "aria-label": "Delete photo " + (i + 1), onclick: async () => {
+          try {
+            await api("/products/" + p.id + "/photos/" + image.id, { method: "DELETE" });
+            toast("Photo deleted.", "ok");
+            render();
+          } catch (e) {
+            toast(e.message, "error");
+          }
+        } }, "Delete"))));
+
+    const more = h("input", { type: "file", multiple: true, accept: PHOTO_TYPES, "aria-label": "Add photos" });
+    const addPhotos = h("button", { class: "btn small", onclick: async () => {
+      if (!more.files || !more.files.length) { toast("Choose one or more photos first.", "error"); return; }
+      try {
+        const done = await uploadPhotos(p.id, more.files);
+        toast(done + (done === 1 ? " photo" : " photos") + " added.", "ok");
+        render();
+      } catch (e) {
+        toast(e.message, "error");
+        render();
+      }
+    } }, "Add photos");
 
     return h("div", { class: "admin-product" },
       h("div", { class: "inline-form" }, thumb({ image_url: p.image_url, name: p.name }), h("span", { class: "muted small" }, "#" + p.id), n, pr, st, sz),
-      h("div", { class: "inline-form" }, save, file, upload, removePhoto, del));
+      desc,
+      h("div", { class: "inline-form" }, save, del),
+      images.length ? photoBar : null,
+      h("div", { class: "inline-form" }, more, addPhotos));
   });
 
   return h("div", {},
     h("div", { class: "card" }, h("h2", {}, "Add a product"),
-      h("p", { class: "muted small" }, "For clothes, write the sizes with their stock, like S:10, M:5, L:0. Leave sizes empty for products without sizes."),
+      h("p", { class: "muted small" }, "For clothes, write the sizes with their stock, like S:10, M:5, L:0. Leave sizes empty for products without sizes. You can add up to 8 photos per product; the first one is the main photo."),
       addForm),
     h("div", { class: "card" }, h("h2", {}, "Products"), rows.length ? rows : h("p", { class: "muted" }, "No products yet.")));
 }
