@@ -199,42 +199,102 @@ def test_expired_payment_returns_stock_to_the_size(client, admin, shopper, monke
     assert size_stock(client, product["id"], "L") == 6
 
 
+# ---------- description ----------
+def test_description_is_saved_and_trimmed(client, admin):
+    body = {"name": "Shirt", "description": "  Soft cotton  ", "price": 10.0, "stock": 1}
+    created = client.post("/products", json=body, headers=admin).json()
+    assert created["description"] == "Soft cotton"
+    body["description"] = "Now with pockets"
+    updated = client.put(f"/products/{created['id']}", json=body, headers=admin).json()
+    assert updated["description"] == "Now with pockets"
+
+
 # ---------- photos ----------
 def upload(client, headers, product_id, data=PNG, name="photo.png", kind="image/png"):
     return client.post(
-        f"/products/{product_id}/image",
+        f"/products/{product_id}/photos",
         files={"file": (name, data, kind)},
         headers=headers,
     )
 
 
+def test_a_new_product_has_no_photos(client, admin):
+    product = create_product(client, admin, stock=1)
+    assert product["image_url"] is None
+    assert product["images"] == []
+
+
 def test_photo_can_be_uploaded_and_shown(client, admin):
     product = create_product(client, admin, stock=1)
     response = upload(client, admin, product["id"])
-    assert response.status_code == 200, response.text
-    assert response.json()["image_url"].startswith(f"/products/{product['id']}/image")
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert len(body["images"]) == 1
+    assert body["image_url"] == body["images"][0]["url"]
 
     listed = client.get("/products").json()
     mine = next(p for p in listed if p["id"] == product["id"])
-    assert mine["image_url"] is not None
+    assert mine["image_url"] == body["image_url"]
 
-    photo = client.get(f"/products/{product['id']}/image")
+    photo = client.get(body["image_url"])
     assert photo.status_code == 200
     assert photo.headers["content-type"] == "image/png"
     assert photo.content == PNG
+    assert "immutable" in photo.headers["cache-control"]
 
 
-def test_photo_can_be_replaced_and_removed(client, admin):
+def test_several_photos_keep_their_order(client, admin):
+    product = create_product(client, admin, stock=1)
+    jpeg = b"\xff\xd8\xff\xe0" + b"0" * 50
+    first = upload(client, admin, product["id"]).json()
+    second = upload(client, admin, product["id"], jpeg, "p.jpg", "image/jpeg").json()
+    ids = [image["id"] for image in second["images"]]
+    assert len(ids) == 2
+    assert second["image_url"] == first["image_url"]
+
+    types = [client.get(image["url"]).headers["content-type"] for image in second["images"]]
+    assert types == ["image/png", "image/jpeg"]
+
+
+def test_a_photo_can_be_made_the_main_one(client, admin):
     product = create_product(client, admin, stock=1)
     upload(client, admin, product["id"])
-    jpeg = b"\xff\xd8\xff\xe0" + b"0" * 50
-    assert upload(client, admin, product["id"], jpeg, "p.jpg", "image/jpeg").status_code == 200
-    assert client.get(f"/products/{product['id']}/image").headers["content-type"] == "image/jpeg"
+    two = upload(client, admin, product["id"]).json()
+    first_id, second_id = [image["id"] for image in two["images"]]
 
-    removed = client.delete(f"/products/{product['id']}/image", headers=admin)
+    changed = client.post(
+        f"/products/{product['id']}/photos/{second_id}/main", headers=admin
+    )
+    assert changed.status_code == 200, changed.text
+    assert [image["id"] for image in changed.json()["images"]] == [second_id, first_id]
+    assert changed.json()["image_url"] == f"/photos/{second_id}"
+
+
+def test_photo_can_be_deleted(client, admin):
+    product = create_product(client, admin, stock=1)
+    photo = upload(client, admin, product["id"]).json()["images"][0]
+    removed = client.delete(
+        f"/products/{product['id']}/photos/{photo['id']}", headers=admin
+    )
     assert removed.status_code == 200
+    assert removed.json()["images"] == []
     assert removed.json()["image_url"] is None
-    assert client.get(f"/products/{product['id']}/image").status_code == 404
+    assert client.get(photo["url"]).status_code == 404
+
+
+def test_a_photo_of_another_product_cannot_be_touched(client, admin):
+    one = create_product(client, admin, stock=1)
+    two = create_product(client, admin, stock=1)
+    photo = upload(client, admin, one["id"]).json()["images"][0]
+    wrong = client.delete(f"/products/{two['id']}/photos/{photo['id']}", headers=admin)
+    assert wrong.status_code == 404
+
+
+def test_a_product_can_have_at_most_eight_photos(client, admin):
+    product = create_product(client, admin, stock=1)
+    for _ in range(8):
+        assert upload(client, admin, product["id"]).status_code == 201
+    assert upload(client, admin, product["id"]).status_code == 400
 
 
 def test_only_real_pictures_are_accepted(client, admin):
@@ -242,7 +302,7 @@ def test_only_real_pictures_are_accepted(client, admin):
     # A text file pretending to be a picture
     fake = upload(client, admin, product["id"], b"just some text", "x.png", "image/png")
     assert fake.status_code == 400
-    # A web page or SVG is not allowed either
+    # An SVG could carry scripts, so it is not allowed either
     svg = upload(client, admin, product["id"], b"<svg></svg>", "x.svg", "image/svg+xml")
     assert svg.status_code == 400
 
@@ -255,13 +315,25 @@ def test_large_pictures_are_rejected(client, admin):
 
 def test_only_admins_can_change_photos(client, admin, shopper):
     product = create_product(client, admin, stock=1)
+    photo = upload(client, admin, product["id"]).json()["images"][0]
     assert upload(client, shopper, product["id"]).status_code == 403
-    assert client.delete(f"/products/{product['id']}/image", headers=shopper).status_code == 403
+    assert (
+        client.delete(
+            f"/products/{product['id']}/photos/{photo['id']}", headers=shopper
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            f"/products/{product['id']}/photos/{photo['id']}/main", headers=shopper
+        ).status_code
+        == 403
+    )
 
 
-def test_deleting_a_product_removes_its_photo_and_sizes(client, admin):
+def test_deleting_a_product_removes_its_photos_and_sizes(client, admin):
     product = create_product(client, admin, sizes=[{"label": "S", "stock": 1}])
-    upload(client, admin, product["id"])
+    photo = upload(client, admin, product["id"]).json()["images"][0]
     assert client.delete(f"/products/{product['id']}", headers=admin).status_code == 204
     assert client.get(f"/products/{product['id']}").status_code == 404
-    assert client.get(f"/products/{product['id']}/image").status_code == 404
+    assert client.get(photo["url"]).status_code == 404
