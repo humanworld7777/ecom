@@ -2,12 +2,14 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
     Integer,
     LargeBinary,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,6 +26,7 @@ class ProductDB(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
     price: Mapped[float] = mapped_column(Float)
     stock: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -53,16 +56,45 @@ class ProductSizeDB(Base):
     stock: Mapped[int] = mapped_column(Integer, default=0)
 
 
-class ProductImageDB(Base):
-    """The photo of a product, kept in the database so it survives redeploys."""
+class ProductPhotoDB(Base):
+    """A photo of a product. Photos live in the database, so they survive redeploys."""
 
-    __tablename__ = "product_images"
+    __tablename__ = "product_photos"
 
+    id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(
-        ForeignKey("products.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     content_type: Mapped[str] = mapped_column(String(50))
     data: Mapped[bytes] = mapped_column(LargeBinary)
+    # The photo with the lowest position is the main photo.
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class ReviewDB(Base):
+    """A star rating (and optional comment) from a customer who bought the product."""
+
+    __tablename__ = "reviews"
+    __table_args__ = (
+        UniqueConstraint("product_id", "user_id", name="uq_review_product_user"),
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_review_rating"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    rating: Mapped[int] = mapped_column(Integer)
+    comment: Mapped[str] = mapped_column(String(1000), default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
@@ -177,3 +209,4 @@ class TrackingEventDB(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
+
