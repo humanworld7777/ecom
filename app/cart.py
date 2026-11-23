@@ -12,17 +12,18 @@ from .models import (
     OrderDB,
     OrderItemDB,
     ProductDB,
-    ProductImageDB,
     ProductSizeDB,
     UserDB,
 )
 from .payments import router as payments_router
-from .products import image_url
+from .products import main_photo_urls
 from .products import router as products_router
+from .reviews import router as reviews_router
 from .site import router as site_router
 
 router = APIRouter()
 router.include_router(products_router)
+router.include_router(reviews_router)
 router.include_router(payments_router)
 router.include_router(delivery_router)
 router.include_router(site_router)
@@ -83,12 +84,7 @@ def build_cart(db: Session, user: UserDB) -> CartOut:
         .order_by(CartItemDB.id)
         .all()
     )
-    stamps = {
-        row.product_id: row.updated_at
-        for row in db.query(ProductImageDB.product_id, ProductImageDB.updated_at).filter(
-            ProductImageDB.product_id.in_([r.product_id for r in rows])
-        )
-    }
+    photos = main_photo_urls(db, [r.product_id for r in rows])
     items = [
         CartItemOut(
             product_id=r.product_id,
@@ -97,7 +93,7 @@ def build_cart(db: Session, user: UserDB) -> CartOut:
             price=r.product.price,
             quantity=r.quantity,
             subtotal=round(r.product.price * r.quantity, 2),
-            image_url=image_url(r.product_id, stamps.get(r.product_id)),
+            image_url=photos.get(r.product_id),
         )
         for r in rows
     ]
