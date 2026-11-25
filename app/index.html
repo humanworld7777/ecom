@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZAPP STORE</title>
+<title>Ecom Store</title>
 <style>
   :root {
     --bg: #f6f7f9; --card: #ffffff; --text: #1c2230; --muted: #667085;
@@ -161,7 +161,7 @@
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="#/shop">ZAPP STORE</a>
+  <a class="brand" href="#/shop">Ecom Store</a>
   <nav id="nav" aria-label="Main"></nav>
 </header>
 <main id="view" aria-live="polite"></main>
@@ -1145,4 +1145,211 @@ async function adminProducts() {
   } },
     h("div", { class: "inline-form" }, name, price, stock, sizes),
     description,
-    h("div", { class: "inline-form" }, photos, h("button", { class: "btn primary",
+    h("div", { class: "inline-form" }, photos, h("button", { class: "btn primary", type: "submit" }, "Add product")));
+
+  const rows = products.map((p) => {
+    const n = h("input", { value: p.name, "aria-label": "Name" });
+    const pr = h("input", { type: "number", step: "0.01", min: "0", value: String(p.price), "aria-label": "Price" });
+    const hasSizes = (p.sizes || []).length > 0;
+    const st = h("input", { type: "number", step: "1", min: "0", value: String(hasSizes ? 0 : p.stock), disabled: hasSizes, "aria-label": "Stock" });
+    const sz = h("input", { value: sizesText(p), placeholder: "Sizes e.g. S:10, M:5", "aria-label": "Sizes and stock" });
+    sz.addEventListener("input", () => { st.disabled = sz.value.trim() !== ""; });
+    const desc = h("textarea", { rows: "2", maxlength: "2000", placeholder: "Description", "aria-label": "Description" }, p.description || "");
+
+    const save = h("button", { class: "btn small", onclick: async () => {
+      try {
+        const sizeList = parseSizes(sz.value);
+        await api("/products/" + p.id, { method: "PUT", json: {
+          name: n.value.trim(),
+          description: desc.value.trim(),
+          price: Number(pr.value),
+          stock: sizeList.length ? 0 : parseInt(st.value || "0", 10),
+          sizes: sizeList,
+        } });
+        toast("Saved.", "ok");
+        render();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    } }, "Save");
+
+    const del = h("button", { class: "btn small ghost", onclick: async () => {
+      if (!confirm("Delete " + p.name + "?")) return;
+      try {
+        await api("/products/" + p.id, { method: "DELETE" });
+        toast("Deleted.", "ok");
+        render();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    } }, "Delete product");
+
+    const images = p.images || [];
+    const photoBar = h("div", { class: "photo-bar" }, images.map((image, i) =>
+      h("div", { class: "photo-item" },
+        h("img", { class: "thumb", src: image.url, alt: "Photo " + (i + 1) + " of " + p.name }),
+        i === 0
+          ? h("span", { class: "badge s-paid" }, "Main")
+          : h("button", { class: "btn small", onclick: async () => {
+              try {
+                await api("/products/" + p.id + "/photos/" + image.id + "/main", { method: "POST" });
+                render();
+              } catch (e) {
+                toast(e.message, "error");
+              }
+            } }, "Make main"),
+        h("button", { class: "btn small ghost", "aria-label": "Delete photo " + (i + 1), onclick: async () => {
+          try {
+            await api("/products/" + p.id + "/photos/" + image.id, { method: "DELETE" });
+            toast("Photo deleted.", "ok");
+            render();
+          } catch (e) {
+            toast(e.message, "error");
+          }
+        } }, "Delete"))));
+
+    const more = h("input", { type: "file", multiple: true, accept: PHOTO_TYPES, "aria-label": "Add photos" });
+    const addPhotos = h("button", { class: "btn small", onclick: async () => {
+      if (!more.files || !more.files.length) { toast("Choose one or more photos first.", "error"); return; }
+      try {
+        const done = await uploadPhotos(p.id, more.files);
+        toast(done + (done === 1 ? " photo" : " photos") + " added.", "ok");
+        render();
+      } catch (e) {
+        toast(e.message, "error");
+        render();
+      }
+    } }, "Add photos");
+
+    return h("div", { class: "admin-product" },
+      h("div", { class: "inline-form" }, thumb({ image_url: p.image_url, name: p.name }), h("span", { class: "muted small" }, "#" + p.id), n, pr, st, sz),
+      desc,
+      h("div", { class: "inline-form" }, save, del),
+      images.length ? photoBar : null,
+      h("div", { class: "inline-form" }, more, addPhotos));
+  });
+
+  return h("div", {},
+    h("div", { class: "card" }, h("h2", {}, "Add a product"),
+      h("p", { class: "muted small" }, "For clothes, write the sizes with their stock, like S:10, M:5, L:0. Leave sizes empty for products without sizes. You can add up to 8 photos per product; the first one is the main photo."),
+      addForm),
+    h("div", { class: "card" }, h("h2", {}, "Products"), rows.length ? rows : h("p", { class: "muted" }, "No products yet.")));
+}
+
+async function adminOrders() {
+  const query = state.adminFilter ? "?status=" + encodeURIComponent(state.adminFilter) : "";
+  const orders = await api("/admin/orders" + query);
+
+  const filter = h("select", { "aria-label": "Filter by status", onchange: () => { state.adminFilter = filter.value; render(); } },
+    [["", "All orders"], ["pending_payment", "Awaiting payment"], ["paid", "Paid"], ["shipped", "Shipped"], ["delivered", "Delivered"], ["cancelled", "Cancelled"]]
+      .map(([value, text]) => h("option", { value, selected: value === state.adminFilter }, text)));
+
+  return h("div", {},
+    h("div", { class: "card" }, h("label", { class: "field" }, h("span", {}, "Show"), filter)),
+    orders.length ? orders.map(adminOrderCard) : h("p", { class: "muted" }, "No orders match."));
+}
+
+function adminOrderCard(order) {
+  const panel = h("div", {});
+  const actions = [];
+
+  const refresh = () => render();
+
+  if (order.status === "paid" && order.delivery_status === "processing") {
+    actions.push(h("button", { class: "btn primary small", onclick: () => panel.replaceChildren(shipForm(order, refresh)) }, "Ship order"));
+  } else if (order.status === "paid" && order.delivery_status === "awaiting_address") {
+    actions.push(h("span", { class: "muted small" }, "Waiting for the customer's delivery address."));
+  } else if (["shipped"].includes(order.status)) {
+    actions.push(h("button", { class: "btn primary small", onclick: () => panel.replaceChildren(trackingForm(order, refresh)) }, "Add tracking update"));
+  }
+  actions.push(h("button", { class: "btn small", onclick: async () => {
+    try {
+      const d = await api("/orders/" + order.id + "/delivery");
+      panel.replaceChildren(h("div", { class: "cols" },
+        h("div", {}, h("h3", {}, "Delivering to"), d.address ? addressLines(d.address) : h("p", { class: "muted" }, "No address yet.")),
+        h("div", {}, h("h3", {}, "History"),
+          h("ul", { class: "timeline" }, d.timeline.slice().reverse().map((e) =>
+            h("li", {}, h("strong", {}, label(e.status)), e.location ? " · " + e.location : "", h("div", { class: "muted small" }, when(e.created_at))))))));
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  } }, "Delivery details"));
+
+  return h("div", { class: "card" },
+    h("div", { class: "order-head" },
+      h("strong", {}, "Order #" + order.id),
+      badge(order.status),
+      badge(order.delivery_status),
+      h("span", { class: "muted small" }, (order.user_email || "unknown customer") + " · " + when(order.created_at)),
+      h("span", { class: "grow" }),
+      h("strong", {}, money(order.total))),
+    h("div", { class: "actions" }, actions),
+    panel);
+}
+
+function shipForm(order, done) {
+  const carrier = h("input", { placeholder: "Carrier", required: true, "aria-label": "Carrier" });
+  const number = h("input", { placeholder: "Tracking number", required: true, minlength: "3", "aria-label": "Tracking number" });
+  const url = h("input", { type: "url", placeholder: "Tracking link (optional)", "aria-label": "Tracking link" });
+  const place = h("input", { placeholder: "Location (optional)", "aria-label": "Location" });
+  return h("form", { class: "inline-form", onsubmit: async (event) => {
+    event.preventDefault();
+    const body = { carrier: carrier.value.trim(), tracking_number: number.value.trim() };
+    if (url.value.trim()) body.tracking_url = url.value.trim();
+    if (place.value.trim()) body.location = place.value.trim();
+    try {
+      await api("/admin/orders/" + order.id + "/ship", { method: "POST", json: body });
+      toast("Order #" + order.id + " marked as shipped.", "ok");
+      done();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  } }, carrier, number, url, place, h("button", { class: "btn primary", type: "submit" }, "Mark as shipped"));
+}
+
+function trackingForm(order, done) {
+  const status = h("select", { "aria-label": "New status" },
+    [["in_transit", "In transit"], ["out_for_delivery", "Out for delivery"], ["delivered", "Delivered"]]
+      .map(([value, text]) => h("option", { value }, text)));
+  const place = h("input", { placeholder: "Location (optional)", "aria-label": "Location" });
+  const note = h("input", { placeholder: "Note (optional)", "aria-label": "Note" });
+  return h("form", { class: "inline-form", onsubmit: async (event) => {
+    event.preventDefault();
+    const body = { status: status.value };
+    if (place.value.trim()) body.location = place.value.trim();
+    if (note.value.trim()) body.note = note.value.trim();
+    try {
+      await api("/admin/orders/" + order.id + "/tracking", { method: "POST", json: body });
+      toast("Tracking updated.", "ok");
+      done();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  } }, status, place, note, h("button", { class: "btn primary", type: "submit" }, "Add update"));
+}
+
+// ---------- start ----------
+async function start() {
+  const params = new URLSearchParams(location.search);
+  const paid = params.get("paid");
+  const cancelled = params.get("cancelled");
+  if (paid || cancelled) {
+    history.replaceState(null, "", location.pathname + "#/orders");
+  } else if (!location.hash) {
+    history.replaceState(null, "", location.pathname + "#/shop");
+  }
+
+  await loadMe();
+  if (paid) {
+    state.poll = 5;
+    toast("Thank you! Your payment was received. Your order will update in a few seconds.", "ok");
+  }
+  if (cancelled) toast("Payment cancelled. Your order is held for a short time.");
+  render();
+}
+
+window.addEventListener("hashchange", render);
+start();
+</script>
+</body>
+</html>
