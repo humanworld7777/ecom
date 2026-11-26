@@ -21,11 +21,28 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class CategoryDB(Base):
+    """A shelf of the shop, such as Clothing or Groceries."""
+
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40), unique=True)
+    slug: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    icon: Mapped[str] = mapped_column(String(16), default="🛍️")
+    # What the choices of this category are called: Size, Pack size, Option ...
+    option_label: Mapped[str] = mapped_column(String(20), default="Size")
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class ProductDB(Base):
     __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     price: Mapped[float] = mapped_column(Float)
     stock: Mapped[int] = mapped_column(Integer, default=0)
@@ -54,6 +71,8 @@ class ProductSizeDB(Base):
     )
     label: Mapped[str] = mapped_column(String(20))
     stock: Mapped[int] = mapped_column(Integer, default=0)
+    # Empty means "same price as the product"
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class ProductPhotoDB(Base):
@@ -209,4 +228,3 @@ class TrackingEventDB(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
-
