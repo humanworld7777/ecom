@@ -1,14 +1,17 @@
 from sqlalchemy import text
 
 # create_all() only creates tables that do not exist yet. These statements bring
-# the tables you already have up to date (the new size and description columns,
-# and the move to several photos per product). Each one can safely run on every
+# the tables you already have up to date (sizes, descriptions, categories, option
+# prices, and the move to several photos per product). Each one can safely run on every
 # start: running it a second time changes nothing.
 POSTGRES_STEPS = [
     "ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS size VARCHAR(20) NOT NULL DEFAULT ''",
     "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size VARCHAR(20) NOT NULL DEFAULT ''",
     "ALTER TABLE cart_items DROP CONSTRAINT IF EXISTS uq_cart_user_product",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE product_sizes ADD COLUMN IF NOT EXISTS price DOUBLE PRECISION",
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories (id) ON DELETE SET NULL",
+    "CREATE INDEX IF NOT EXISTS ix_products_category_id ON products (category_id)",
     # The first version kept one photo per product in "product_images". Move
     # those photos into the new "product_photos" table, then drop the old one.
     """
