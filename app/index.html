@@ -3,18 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ecom Store</title>
+<title>ZAPP Store</title>
 <style>
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --text: #1c2230; --muted: #667085;
-    --line: #e4e7ec; --accent: #3b5bdb; --accent-text: #ffffff;
-    --ok: #177245; --err: #b42318; --warn: #a15c07;
+    --bg: #fffaf5; --card: #ffffff; --text: #2b2320; --muted: #7a6b62;
+    --line: #eee3da; --accent: #d9480f; --accent-text: #ffffff;
+    --ok: #2b8a3e; --err: #c92a2a; --warn: #b36200;
+    --shadow: 0 8px 28px rgba(120, 70, 30, .10);
+    --hero-a: #fff0e0; --hero-b: #ffe0ea;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #10131a; --card: #181c26; --text: #e8ebf2; --muted: #9aa3b5;
-      --line: #2a3040; --accent: #7c93f5; --accent-text: #10131a;
-      --ok: #4ade80; --err: #f87171; --warn: #fbbf24;
+      --bg: #17120f; --card: #211a16; --text: #f4ebe4; --muted: #b5a59a;
+      --line: #3a2e27; --accent: #ff8a5b; --accent-text: #1b110c;
+      --ok: #69db7c; --err: #ff8787; --warn: #ffc078;
+      --shadow: 0 8px 28px rgba(0, 0, 0, .35);
+      --hero-a: #2b1d14; --hero-b: #2d1923;
     }
   }
   * { box-sizing: border-box; }
@@ -72,7 +76,7 @@
   .total { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; font-size: 1.1rem; font-weight: 700; }
   .badge { display: inline-block; font-size: .75rem; font-weight: 600; padding: .1rem .55rem; border-radius: 999px; background: var(--line); }
   .s-paid, .s-delivered { background: rgba(23,114,69,.16); color: var(--ok); }
-  .s-shipped, .s-in_transit, .s-out_for_delivery, .s-processing { background: rgba(59,91,219,.16); color: var(--accent); }
+  .s-shipped, .s-in_transit, .s-out_for_delivery, .s-processing { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
   .s-pending_payment, .s-awaiting_address { background: rgba(161,92,7,.16); color: var(--warn); }
   .s-cancelled { background: rgba(180,35,24,.16); color: var(--err); }
   .order-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: .5rem; }
@@ -157,18 +161,70 @@
   .lb-prev { left: 1rem; top: 50%; }
   .lb-next { right: 1rem; top: 50%; }
   .lb-count { position: absolute; bottom: 1rem; color: #fff; font-size: .9rem; }
+  /* ---- ZAPP Store look ---- */
+  body { font-family: ui-rounded, "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 1.8rem; letter-spacing: -.01em; }
+  .card { border-radius: 16px; box-shadow: var(--shadow); }
+  .btn { border-radius: 10px; font-weight: 600; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+  .btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn.primary:hover:not(:disabled) { box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .btn.big { padding: .75rem 1.4rem; font-size: 1.05rem; border-radius: 12px; }
+  .brand { font-weight: 800; font-size: 1.3rem; letter-spacing: .02em; display: flex; align-items: center; gap: .35rem; }
+  .brand .bolt { color: var(--accent); }
+  .top { background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(8px); }
+  .product { transition: transform .15s ease; }
+  .product:hover { transform: translateY(-3px); }
+  .hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: 2rem; align-items: center; padding: 2.5rem 2rem; margin-bottom: 1.5rem; border-radius: 24px; background: linear-gradient(135deg, var(--hero-a), var(--hero-b)); box-shadow: var(--shadow); }
+  @media (max-width: 760px) { .hero { grid-template-columns: 1fr; padding: 1.75rem 1.25rem; } .hero-art { display: none; } }
+  .eyebrow { margin: 0 0 .25rem; color: var(--accent); font-weight: 700; }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; margin: 0 0 .75rem; }
+  .lead { font-size: 1.1rem; color: var(--muted); margin: 0 0 1.25rem; max-width: 34rem; }
+  .hero-search { display: flex; gap: .5rem; margin-bottom: 1rem; max-width: 32rem; }
+  .hero-search input { flex: 1; border-radius: 12px; padding: .75rem 1rem; font-size: 1rem; }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+  .hero-art { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; }
+  .art-tile { aspect-ratio: 1; display: grid; place-items: center; font-size: 2.4rem; border-radius: 20px; background: var(--card); box-shadow: var(--shadow); }
+  .art-tile:nth-child(odd) { transform: rotate(-4deg); }
+  .art-tile:nth-child(even) { transform: rotate(4deg) translateY(10px); }
+  .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin: 2rem 0 1rem; }
+  .section-head h2 { font-size: 1.4rem; margin: 0; }
+  .section-head p { margin: 0; }
+  .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
+  .cat-tile { display: grid; gap: .15rem; justify-items: start; padding: 1.1rem; border-radius: 18px; text-decoration: none; color: var(--text); background: hsl(var(--h) 85% 94%); transition: transform .15s ease, box-shadow .15s ease; }
+  @media (prefers-color-scheme: dark) { .cat-tile { background: hsl(var(--h) 22% 18%); } }
+  .cat-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+  .cat-icon { font-size: 2rem; line-height: 1; margin-bottom: .35rem; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 2.5rem; }
+  .feature { padding: 1.1rem 1.25rem; border-radius: 16px; background: var(--card); box-shadow: var(--shadow); }
+  .feature .emoji { font-size: 1.6rem; }
+  .feature h3 { margin: .35rem 0 .25rem; }
+  .feature p { margin: 0; }
+  .nudge { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; padding: .85rem 1.1rem; margin-bottom: 1.5rem; border-radius: 14px; background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
+  .cat-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  .cat-chip { padding: .35rem .9rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); text-decoration: none; font-weight: 600; font-size: .9rem; }
+  .cat-chip.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .page-head { margin-bottom: 1rem; }
+  .page-head h1 { margin-bottom: .25rem; }
+  .page-head p { margin: 0; }
+  .crumbs { margin: 0 0 .75rem; font-size: .9rem; }
+  .foot { text-align: center; padding: 2rem 1rem 3rem; color: var(--muted); font-size: .9rem; }
+  .foot p { margin: 0; }
 </style>
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="#/shop">Ecom Store</a>
+  <a class="brand" href="#/home"><span class="bolt" aria-hidden="true">⚡</span><span id="brand-name">ZAPP Store</span></a>
   <nav id="nav" aria-label="Main"></nav>
 </header>
 <main id="view" aria-live="polite"></main>
 <div id="toasts"></div>
+<footer class="foot" id="foot"><p>⚡ ZAPP Store · Made with care · Secure checkout powered by Stripe</p></footer>
 
 <script>
 "use strict";
+
+// The name of the shop. Change it here and it changes everywhere on the page.
+const STORE_NAME = "ZAPP Store";
 
 // Must match the STRIPE_CURRENCY setting of the server (default usd).
 const CURRENCY = "USD";
@@ -198,6 +254,7 @@ const state = {
   cartCount: 0,
   poll: 0,
   adminFilter: "",
+  categories: [],
 };
 
 const $view = document.getElementById("view");
@@ -299,6 +356,14 @@ async function loadMe() {
   }
 }
 
+async function loadCategories() {
+  try {
+    state.categories = await api("/categories", { auth: false });
+  } catch (e) {
+    state.categories = [];
+  }
+}
+
 function signOut(announce = true) {
   localStorage.removeItem("token");
   state.token = null;
@@ -306,8 +371,8 @@ function signOut(announce = true) {
   state.cartCount = 0;
   renderNav();
   if (announce) {
-    toast("You have been signed out.");
-    go("#/shop");
+    toast("You are signed out. Come back soon!");
+    go("#/home");
   }
 }
 
@@ -325,14 +390,15 @@ function setCartCount(cart) {
 
 // ---------- navigation ----------
 function renderNav() {
-  const page = location.hash.split("/")[1] || "shop";
-  const link = (target, text) =>
-    h("a", { href: "#/" + target, class: page === target ? "active" : "" }, text);
+  const page = location.hash.split("/")[1] || "home";
+  const link = (target, text, pages = [target]) =>
+    h("a", { href: "#/" + target, class: pages.includes(page) ? "active" : "" }, text);
 
   const items = [
-    link("shop", "Shop"),
+    link("home", "Home"),
+    link("shop", "Shop", ["shop", "category", "product"]),
     link("cart", "Cart" + (state.cartCount ? " (" + state.cartCount + ")" : "")),
-    link("orders", "My orders"),
+    link("orders", "My orders", ["orders", "track", "checkout"]),
   ];
   if (state.me && state.me.is_admin) items.push(link("admin", "Admin"));
   if (state.me) {
@@ -346,10 +412,12 @@ function renderNav() {
 
 async function render() {
   renderNav();
-  const [, page = "shop", arg] = location.hash.split("/");
+  const [, page = "home", arg] = location.hash.split("/");
   show(h("p", { class: "muted" }, "Loading…"));
   const views = {
+    home: viewHome,
     shop: viewShop,
+    category: viewShop,
     product: viewProduct,
     cart: viewCart,
     orders: viewOrders,
@@ -359,7 +427,7 @@ async function render() {
     admin: viewAdmin,
   };
   try {
-    await (views[page] || viewShop)(arg);
+    await (views[page] || viewHome)(arg);
   } catch (e) {
     show(
       h("div", { class: "card" },
@@ -392,10 +460,135 @@ function ratingLine(p) {
     : h("p", { class: "muted small" }, "No reviews yet");
 }
 
-async function viewShop() {
+// What the choices of a product are called: Size, Pack size ...
+const optionLabel = (p) => (p.category && p.category.option_label) || "Size";
+
+// "$4.00", or "From $3.00" when the sizes or packs are priced differently
+function priceLabel(p) {
+  const prices = (p.sizes || []).map((s) => (s.price != null ? s.price : p.price));
+  if (!prices.length) return money(p.price);
+  const lowest = Math.min(...prices);
+  return lowest === Math.max(...prices) ? money(lowest) : "From " + money(lowest);
+}
+
+function optionText(s, p) {
+  const own = s.price != null && s.price !== p.price ? " · " + money(s.price) : "";
+  return s.label + own + (s.stock <= 0 ? " (sold out)" : "");
+}
+
+function greeting() {
+  const hour = new Date().getHours();
+  const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const name = firstName();
+  return name ? part + ", " + name + "!" : part + "!";
+}
+
+// Use the first part of the email as a first name, but only when it looks like one
+function firstName() {
+  if (!state.me) return "";
+  const local = state.me.email.split("@")[0];
+  return /^[A-Za-z]{2,20}$/.test(local) ? local.charAt(0).toUpperCase() + local.slice(1).toLowerCase() : "";
+}
+
+const HUES = [18, 140, 340, 200, 275, 48, 170, 0];
+
+function productRow(title, subtitle, list) {
+  return h("section", {},
+    h("div", { class: "section-head" },
+      h("div", {}, h("h2", {}, title), h("p", { class: "muted small" }, subtitle)),
+      h("a", { href: "#/shop" }, "See all →")),
+    h("div", { class: "grid" }, list.map(productCard)));
+}
+
+// ---------- home ----------
+async function viewHome() {
   const products = await api("/products", { auth: false });
-  if (!products.length) {
-    show(h("h1", {}, "Shop"), h("p", { class: "muted" }, "No products yet. Please check back soon."));
+  const cats = state.categories;
+
+  const search = h("input", { type: "search", placeholder: "What are you looking for today?", "aria-label": "Search products" });
+  const heroForm = h("form", { class: "hero-search", onsubmit: (event) => {
+    event.preventDefault();
+    shopState.q = search.value.trim();
+    go("#/shop");
+  } }, search, h("button", { class: "btn primary big", type: "submit" }, "Search"));
+
+  const icons = (cats.length ? cats.map((c) => c.icon) : ["🛍️", "🛒", "👕"]).slice(0, 6);
+  const hero = h("section", { class: "hero" },
+    h("div", {},
+      h("p", { class: "eyebrow" }, greeting()),
+      h("h1", {}, "Everything you need, in one friendly place."),
+      h("p", { class: "lead" }, "From everyday groceries to clothes you will love, pick what you like and we will look after your order from checkout to your door."),
+      heroForm,
+      h("div", { class: "hero-actions" },
+        h("a", { class: "btn primary big", href: "#/shop" }, "Start shopping"),
+        h("a", { class: "btn big", href: "#/home", onclick: (event) => {
+          event.preventDefault();
+          const target = document.getElementById("categories");
+          if (target && target.scrollIntoView) target.scrollIntoView({ behavior: "smooth" });
+        } }, "Browse categories"))),
+    h("div", { class: "hero-art", "aria-hidden": "true" }, icons.map((icon) => h("div", { class: "art-tile" }, icon))));
+
+  const nudge = state.cartCount > 0
+    ? h("div", { class: "nudge" },
+        h("span", {}, "🛒 You have " + state.cartCount + (state.cartCount === 1 ? " item" : " items") + " waiting in your cart."),
+        h("a", { class: "btn primary small", href: "#/cart" }, "Go to my cart"))
+    : null;
+
+  const tiles = cats.length
+    ? h("section", { id: "categories" },
+        h("div", { class: "section-head" }, h("h2", {}, "Shop by category"), h("a", { href: "#/shop" }, "See everything →")),
+        h("div", { class: "cat-grid" }, cats.map((c, i) =>
+          h("a", { class: "cat-tile", href: "#/category/" + c.slug, style: "--h:" + HUES[i % HUES.length] },
+            h("span", { class: "cat-icon", "aria-hidden": "true" }, c.icon),
+            h("strong", {}, c.name),
+            h("span", { class: "muted small" }, c.product_count + (c.product_count === 1 ? " item" : " items"))))))
+    : null;
+
+  const loved = products.filter((p) => p.rating_count > 0).sort(SORTS.rating).slice(0, 4);
+  const fresh = products.slice().sort(SORTS.newest).slice(0, 4);
+
+  const features = h("section", { class: "features" },
+    h("div", { class: "feature" }, h("div", { class: "emoji", "aria-hidden": "true" }, "🔒"), h("h3", {}, "Safe, simple checkout"), h("p", { class: "muted small" }, "You pay on Stripe's secure page, so your card details never touch our shop.")),
+    h("div", { class: "feature" }, h("div", { class: "emoji", "aria-hidden": "true" }, "📦"), h("h3", {}, "Follow your order"), h("p", { class: "muted small" }, "See every step from packed to delivered, right on your order page.")),
+    h("div", { class: "feature" }, h("div", { class: "emoji", "aria-hidden": "true" }, "⭐"), h("h3", {}, "Honest reviews"), h("p", { class: "muted small" }, "Only customers who bought a product can review it, so the ratings are real.")));
+
+  show(
+    hero,
+    nudge,
+    tiles,
+    loved.length ? productRow("Customer favourites", "Loved by the people who bought them", loved) : null,
+    fresh.length ? productRow("Just in", "The newest things on our shelves", fresh) : null,
+    products.length ? null : h("div", { class: "card" }, h("p", {}, "We are stocking the shelves right now. Please check back soon!")),
+    features
+  );
+}
+
+// ---------- shop ----------
+async function viewShop(slug) {
+  const products = await api("/products", { auth: false });
+  const category = slug ? state.categories.find((c) => c.slug === slug) : null;
+
+  if (slug && !category) {
+    show(
+      h("div", { class: "page-head" }, h("h1", {}, "We could not find that aisle"), h("p", { class: "muted" }, "It may have been renamed or removed.")),
+      h("a", { class: "btn primary", href: "#/shop" }, "Browse everything")
+    );
+    return;
+  }
+
+  const chips = h("nav", { class: "cat-chips", "aria-label": "Categories" },
+    h("a", { class: "cat-chip" + (category ? "" : " on"), href: "#/shop" }, "All"),
+    state.categories.map((c) =>
+      h("a", { class: "cat-chip" + (category && c.id === category.id ? " on" : ""), href: "#/category/" + c.slug }, c.icon + " " + c.name)));
+  const heading = h("div", { class: "page-head" },
+    h("h1", {}, category ? category.icon + " " + category.name : "Shop"),
+    h("p", { class: "muted" }, category ? "Everything we have in " + category.name + "." : "Have a look around. We think you will find something you love."));
+
+  const pool = category ? products.filter((p) => p.category && p.category.id === category.id) : products;
+  if (!pool.length) {
+    show(heading, chips, h("div", { class: "card" },
+      h("p", {}, category ? "Nothing on this shelf yet. Please check back soon!" : "No products yet. Please check back soon!"),
+      category ? h("a", { class: "btn", href: "#/shop" }, "See everything else") : null));
     return;
   }
 
@@ -409,14 +602,14 @@ async function viewShop() {
 
   function draw() {
     const q = shopState.q.trim().toLowerCase();
-    let list = products.filter((p) => !q || (p.name + " " + (p.description || "")).toLowerCase().includes(q));
+    let list = pool.filter((p) => !q || (p.name + " " + (p.description || "")).toLowerCase().includes(q));
     if (shopState.inStock) list = list.filter((p) => p.stock > 0);
     list.sort(SORTS[shopState.sort] || SORTS.newest);
     count.replaceChildren(document.createTextNode(list.length + (list.length === 1 ? " product" : " products")));
     results.replaceChildren(
       list.length
         ? h("div", { class: "grid" }, list.map(productCard))
-        : h("p", { class: "muted" }, "No products match your search."));
+        : h("p", { class: "muted" }, "We could not find anything for that. Try another word, or clear the filters."));
   }
 
   search.addEventListener("input", () => { shopState.q = search.value; draw(); });
@@ -424,7 +617,8 @@ async function viewShop() {
   stockOnly.addEventListener("change", () => { shopState.inStock = stockOnly.checked; draw(); });
 
   show(
-    h("h1", {}, "Shop"),
+    heading,
+    chips,
     h("div", { class: "card controls" }, search, sort,
       h("label", { class: "check" }, stockOnly, "In stock only")),
     count,
@@ -445,9 +639,9 @@ function productCard(p) {
   const soldOut = p.stock <= 0;
   const sizes = p.sizes || [];
   const picker = sizes.length
-    ? h("select", { "aria-label": "Size for " + p.name },
-        h("option", { value: "" }, "Select size"),
-        sizes.map((s) => h("option", { value: s.label, disabled: s.stock <= 0 }, s.label + (s.stock <= 0 ? " (sold out)" : ""))))
+    ? h("select", { "aria-label": optionLabel(p) + " for " + p.name },
+        h("option", { value: "" }, "Select " + optionLabel(p).toLowerCase()),
+        sizes.map((s) => h("option", { value: s.label, disabled: s.stock <= 0 }, optionText(s, p))))
     : null;
   const button = h("button", {
     class: "btn primary",
@@ -457,7 +651,7 @@ function productCard(p) {
   return h("article", { class: "card product" },
     h("a", { href: "#/product/" + p.id, "aria-label": "View " + p.name }, productImage(p)),
     h("h3", {}, h("a", { class: "plain", href: "#/product/" + p.id }, p.name)),
-    h("p", { class: "price" }, money(p.price)),
+    h("p", { class: "price" }, priceLabel(p)),
     ratingLine(p),
     h("p", { class: "muted small" },
       soldOut ? "Currently unavailable" : p.stock <= 5 ? "Only " + p.stock + " left" : "In stock"),
@@ -469,7 +663,7 @@ function productCard(p) {
 async function addToCart(product, button, size, quantity = 1) {
   if (!requireLogin()) return;
   if ((product.sizes || []).length && !size) {
-    toast("Please choose a size first.", "error");
+    toast("Please choose a " + optionLabel(product).toLowerCase() + " first.", "error");
     return;
   }
   button.disabled = true;
@@ -479,7 +673,7 @@ async function addToCart(product, button, size, quantity = 1) {
       json: { product_id: product.id, quantity, size },
     });
     setCartCount(cart);
-    toast(product.name + (size ? " (" + size + ")" : "") + " was added to your cart.", "ok");
+    toast(product.name + (size ? " (" + size + ")" : "") + " is in your cart. Nice choice!", "ok");
   } catch (e) {
     toast(e.message, "error");
   } finally {
@@ -496,9 +690,12 @@ async function viewProduct(id) {
   const mine = state.me ? await api("/products/" + id + "/reviews/mine") : null;
 
   const sizes = product.sizes || [];
+  const label = optionLabel(product);
   const soldOut = product.stock <= 0;
   let chosen = "";
   let quantity = 1;
+
+  const priceEl = h("p", { class: "price big-price" }, priceLabel(product));
 
   const chips = sizes.map((s) => {
     const chip = h("button", {
@@ -509,8 +706,9 @@ async function viewProduct(id) {
           c.className = "chip" + (c === chip ? " on" : "");
           c.setAttribute("aria-pressed", c === chip ? "true" : "false");
         });
+        priceEl.replaceChildren(document.createTextNode(money(s.price != null ? s.price : product.price)));
       },
-    }, s.label + (s.stock <= 0 ? " (sold out)" : ""));
+    }, optionText(s, product));
     return chip;
   });
 
@@ -519,15 +717,18 @@ async function viewProduct(id) {
     quantity = Math.max(1, Math.min(20, n));
     qtyValue.replaceChildren(document.createTextNode(String(quantity)));
   };
-  const add = h("button", { class: "btn primary", disabled: soldOut, onclick: () => addToCart(product, add, chosen, quantity) },
+  const add = h("button", { class: "btn primary big", disabled: soldOut, onclick: () => addToCart(product, add, chosen, quantity) },
     soldOut ? "Out of stock" : "Add to cart");
 
   const info = h("div", {},
+    product.category
+      ? h("p", { class: "crumbs" }, h("a", { href: "#/category/" + product.category.slug }, product.category.icon + " " + product.category.name))
+      : null,
     h("h1", {}, product.name),
     ratingLine(product),
-    h("p", { class: "price big-price" }, money(product.price)),
+    priceEl,
     product.description ? h("p", { class: "desc" }, product.description) : null,
-    sizes.length ? h("div", {}, h("strong", {}, "Size"), h("div", { class: "chips" }, chips)) : null,
+    sizes.length ? h("div", {}, h("strong", {}, label), h("div", { class: "chips" }, chips)) : null,
     h("div", { class: "qty" },
       h("button", { class: "btn small", "aria-label": "Decrease quantity", onclick: () => setQty(quantity - 1) }, "-"),
       qtyValue,
@@ -710,7 +911,7 @@ function reviewForm(product, existing) {
 
 // ---------- cart ----------
 const sizeQuery = (size) => (size ? "?size=" + encodeURIComponent(size) : "");
-const sizeNote = (size) => (size ? " (size " + size + ")" : "");
+const sizeNote = (size) => (size ? " (" + size + ")" : "");
 
 function thumb(item) {
   return item.image_url
@@ -726,8 +927,8 @@ async function viewCart() {
   if (!cart.items.length) {
     show(
       h("h1", {}, "Your cart"),
-      h("p", { class: "muted" }, "Your cart is empty."),
-      h("a", { class: "btn", href: "#/shop" }, "Browse products")
+      h("p", { class: "muted" }, "Your cart is feeling a little empty. Let us fill it with something nice!"),
+      h("a", { class: "btn primary", href: "#/shop" }, "Find something you love")
     );
     return;
   }
@@ -737,7 +938,7 @@ async function viewCart() {
       thumb(item),
       h("div", { class: "grow" },
         h("a", { class: "plain", href: "#/product/" + item.product_id }, h("strong", {}, item.name)),
-        item.size ? h("div", { class: "small" }, "Size: " + item.size) : null,
+        item.size ? h("div", { class: "small" }, (item.option_label || "Size") + ": " + item.size) : null,
         h("div", { class: "muted small" }, money(item.price) + " each")),
       h("div", { class: "qty" },
         h("button", { class: "btn small", "aria-label": "Decrease quantity", onclick: () => changeQuantity(item, item.quantity - 1) }, "-"),
@@ -857,7 +1058,9 @@ async function viewCheckout(id) {
   });
 
   show(
-    h("h1", {}, "Checkout"),
+    h("div", { class: "page-head" },
+      h("h1", {}, "Almost there!"),
+      h("p", { class: "muted" }, "Tell us where to send your order and we will take care of the rest.")),
     h("div", { class: "cols" },
       h("div", { class: "card" }, h("h2", {}, "Delivery address"), form),
       h("div", { class: "card" },
@@ -887,7 +1090,11 @@ async function viewOrders() {
 
   show(
     h("h1", {}, "My orders"),
-    orders.length ? orders.map(orderCard) : h("p", { class: "muted" }, "You have not placed any orders yet.")
+    orders.length
+      ? orders.map(orderCard)
+      : h("div", { class: "card" },
+          h("p", {}, "No orders yet. Your first one is just a few clicks away!"),
+          h("a", { class: "btn primary", href: "#/shop" }, "Start shopping"))
   );
 }
 
@@ -992,7 +1199,7 @@ function addressLines(a) {
 
 // ---------- sign in / register ----------
 async function viewLogin() {
-  if (state.me) { go("#/shop"); return; }
+  if (state.me) { go("#/home"); return; }
   let mode = "login";
   const box = h("div", { class: "card narrow" });
 
@@ -1014,10 +1221,10 @@ async function viewLogin() {
         state.token = data.access_token;
         localStorage.setItem("token", state.token);
         await loadMe();
-        toast(mode === "login" ? "Welcome back!" : "Your account was created.", "ok");
-        const next = sessionStorage.getItem("next") || "#/shop";
+        toast(mode === "login" ? "Welcome back!" : "Welcome aboard! Your account is ready.", "ok");
+        const next = sessionStorage.getItem("next") || "#/home";
         sessionStorage.removeItem("next");
-        go(next === "#/login" ? "#/shop" : next);
+        go(next === "#/login" ? "#/home" : next);
       } catch (e) {
         toast(e.message, "error");
       } finally {
@@ -1029,7 +1236,7 @@ async function viewLogin() {
       submit);
     const switcher = h("button", { class: "btn ghost", type: "button", onclick: () => { mode = mode === "login" ? "register" : "login"; draw(); } },
       mode === "login" ? "New here? Create an account" : "Already have an account? Sign in");
-    box.replaceChildren(h("h1", {}, mode === "login" ? "Sign in" : "Create an account"), form, h("p", {}, switcher));
+    box.replaceChildren(h("h1", {}, mode === "login" ? "Welcome back" : "Create your account"), form, h("p", {}, switcher));
   }
 
   draw();
@@ -1043,30 +1250,34 @@ async function viewAdmin(tab = "products") {
     show(h("h1", {}, "Admin"), h("p", { class: "muted" }, "You need an admin account to open this page."));
     return;
   }
+  const names = { products: "Products", categories: "Categories", orders: "Orders" };
   const tabs = h("div", { class: "tabs" },
-    ["products", "orders"].map((t) =>
-      h("a", { class: "tab" + (t === tab ? " active" : ""), href: "#/admin/" + t }, t === "products" ? "Products" : "Orders")));
-  const body = tab === "orders" ? await adminOrders() : await adminProducts();
+    Object.keys(names).map((t) =>
+      h("a", { class: "tab" + (t === tab ? " active" : ""), href: "#/admin/" + t }, names[t])));
+  const body = tab === "orders" ? await adminOrders() : tab === "categories" ? await adminCategories() : await adminProducts();
   show(h("h1", {}, "Admin"), tabs, body);
 }
 
-// "S:10, M:5" -> [{ label: "S", stock: 10 }, { label: "M", stock: 5 }]
+// "S:10, M:5" or "1 kg:10:75" (name:stock or name:stock:price)
+// -> [{ label: "S", stock: 10 }, { label: "1 kg", stock: 10, price: 75 }]
 function parseSizes(text) {
   const result = [];
   for (const part of text.split(",")) {
     const bit = part.trim();
     if (!bit) continue;
-    const [label, stock] = bit.split(":").map((x) => x.trim());
+    const [label, stock, price] = bit.split(":").map((x) => x.trim());
     const count = stock === undefined || stock === "" ? 0 : Number(stock);
-    if (!label || !Number.isInteger(count) || count < 0) {
-      throw new Error('Could not read "' + bit + '". Write sizes like S:10, M:5, L:0');
+    const cost = price === undefined || price === "" ? null : Number(price);
+    if (!label || !Number.isInteger(count) || count < 0 || (cost !== null && (!Number.isFinite(cost) || cost < 0))) {
+      throw new Error('Could not read "' + bit + '". Write options like S:10, M:5 or, with a price, 1 kg:10:75');
     }
-    result.push({ label, stock: count });
+    result.push(cost === null ? { label, stock: count } : { label, stock: count, price: cost });
   }
   return result;
 }
 
-const sizesText = (p) => (p.sizes || []).map((s) => s.label + ":" + s.stock).join(", ");
+const sizesText = (p) =>
+  (p.sizes || []).map((s) => s.label + ":" + s.stock + (s.price != null ? ":" + s.price : "")).join(", ");
 
 // Phone photos are big, so shrink them in the browser before uploading.
 async function shrinkImage(file) {
@@ -1106,13 +1317,20 @@ async function uploadPhotos(productId, files) {
 
 const PHOTO_TYPES = "image/jpeg,image/png,image/webp";
 
+function categorySelect(selectedId) {
+  return h("select", { "aria-label": "Category" },
+    h("option", { value: "" }, "No category"),
+    state.categories.map((c) => h("option", { value: String(c.id), selected: c.id === selectedId }, c.icon + " " + c.name)));
+}
+
 async function adminProducts() {
   const products = await api("/products", { auth: false });
 
   const name = h("input", { placeholder: "Name", required: true, "aria-label": "Product name" });
+  const category = categorySelect(null);
   const price = h("input", { type: "number", step: "0.01", min: "0", placeholder: "Price", required: true, "aria-label": "Price" });
   const stock = h("input", { type: "number", step: "1", min: "0", placeholder: "Stock", required: true, "aria-label": "Stock" });
-  const sizes = h("input", { placeholder: "Sizes and stock, e.g. S:10, M:5 (optional)", "aria-label": "Sizes and stock" });
+  const sizes = h("input", { placeholder: "Options and stock, e.g. S:10, M:5 (optional)", "aria-label": "Sizes and stock" });
   const description = h("textarea", { rows: "3", maxlength: "2000", placeholder: "Description (optional)", "aria-label": "Description" });
   const photos = h("input", { type: "file", multiple: true, accept: PHOTO_TYPES, "aria-label": "Product photos" });
   sizes.addEventListener("input", () => { stock.disabled = sizes.value.trim() !== ""; });
@@ -1123,6 +1341,7 @@ async function adminProducts() {
       const sizeList = parseSizes(sizes.value);
       const created = await api("/products", { method: "POST", json: {
         name: name.value.trim(),
+        category_id: category.value ? Number(category.value) : null,
         description: description.value.trim(),
         price: Number(price.value),
         stock: sizeList.length ? 0 : parseInt(stock.value || "0", 10),
@@ -1143,16 +1362,17 @@ async function adminProducts() {
       toast(e.message, "error");
     }
   } },
-    h("div", { class: "inline-form" }, name, price, stock, sizes),
+    h("div", { class: "inline-form" }, name, category, price, stock, sizes),
     description,
     h("div", { class: "inline-form" }, photos, h("button", { class: "btn primary", type: "submit" }, "Add product")));
 
   const rows = products.map((p) => {
     const n = h("input", { value: p.name, "aria-label": "Name" });
+    const cat = categorySelect(p.category ? p.category.id : null);
     const pr = h("input", { type: "number", step: "0.01", min: "0", value: String(p.price), "aria-label": "Price" });
     const hasSizes = (p.sizes || []).length > 0;
     const st = h("input", { type: "number", step: "1", min: "0", value: String(hasSizes ? 0 : p.stock), disabled: hasSizes, "aria-label": "Stock" });
-    const sz = h("input", { value: sizesText(p), placeholder: "Sizes e.g. S:10, M:5", "aria-label": "Sizes and stock" });
+    const sz = h("input", { value: sizesText(p), placeholder: "Options e.g. S:10, M:5", "aria-label": "Sizes and stock" });
     sz.addEventListener("input", () => { st.disabled = sz.value.trim() !== ""; });
     const desc = h("textarea", { rows: "2", maxlength: "2000", placeholder: "Description", "aria-label": "Description" }, p.description || "");
 
@@ -1161,6 +1381,7 @@ async function adminProducts() {
         const sizeList = parseSizes(sz.value);
         await api("/products/" + p.id, { method: "PUT", json: {
           name: n.value.trim(),
+          category_id: cat.value ? Number(cat.value) : null,
           description: desc.value.trim(),
           price: Number(pr.value),
           stock: sizeList.length ? 0 : parseInt(st.value || "0", 10),
@@ -1222,7 +1443,7 @@ async function adminProducts() {
     } }, "Add photos");
 
     return h("div", { class: "admin-product" },
-      h("div", { class: "inline-form" }, thumb({ image_url: p.image_url, name: p.name }), h("span", { class: "muted small" }, "#" + p.id), n, pr, st, sz),
+      h("div", { class: "inline-form" }, thumb({ image_url: p.image_url, name: p.name }), h("span", { class: "muted small" }, "#" + p.id), n, cat, pr, st, sz),
       desc,
       h("div", { class: "inline-form" }, save, del),
       images.length ? photoBar : null,
@@ -1231,9 +1452,64 @@ async function adminProducts() {
 
   return h("div", {},
     h("div", { class: "card" }, h("h2", {}, "Add a product"),
-      h("p", { class: "muted small" }, "For clothes, write the sizes with their stock, like S:10, M:5, L:0. Leave sizes empty for products without sizes. You can add up to 8 photos per product; the first one is the main photo."),
+      h("p", { class: "muted small" },
+        "Choose a category, then write its options with their stock: S:10, M:5 for clothes. For groceries or anything sold in packs, add each pack's own price after the stock: 500 g:20:40, 1 kg:10:75. Leave options empty for products without any. Up to 8 photos per product; the first one is the main photo."),
       addForm),
     h("div", { class: "card" }, h("h2", {}, "Products"), rows.length ? rows : h("p", { class: "muted" }, "No products yet.")));
+}
+
+async function adminCategories() {
+  await loadCategories();
+
+  const icon = h("input", { value: "🛍️", maxlength: "8", "aria-label": "Icon", placeholder: "Icon" });
+  const name = h("input", { placeholder: "Category name, e.g. Toys", required: true, "aria-label": "Category name" });
+  const option = h("input", { value: "Size", required: true, maxlength: "20", "aria-label": "Option name", placeholder: "Option name, e.g. Size or Pack size" });
+  const addForm = h("form", { class: "inline-form", onsubmit: async (event) => {
+    event.preventDefault();
+    try {
+      await api("/categories", { method: "POST", json: { name: name.value.trim(), icon: icon.value.trim(), option_label: option.value.trim() } });
+      await loadCategories();
+      toast("Category added.", "ok");
+      render();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  } }, icon, name, option, h("button", { class: "btn primary", type: "submit" }, "Add category"));
+
+  const rows = state.categories.map((c) => {
+    const i = h("input", { value: c.icon, maxlength: "8", "aria-label": "Icon" });
+    const n = h("input", { value: c.name, "aria-label": "Category name" });
+    const o = h("input", { value: c.option_label, maxlength: "20", "aria-label": "Option name" });
+    const save = h("button", { class: "btn small", onclick: async () => {
+      try {
+        await api("/categories/" + c.id, { method: "PUT", json: { name: n.value.trim(), icon: i.value.trim(), option_label: o.value.trim() } });
+        await loadCategories();
+        toast("Saved.", "ok");
+        render();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    } }, "Save");
+    const del = h("button", { class: "btn small ghost", onclick: async () => {
+      if (!confirm("Delete " + c.name + "? Its products stay in the shop, just without a category.")) return;
+      try {
+        await api("/categories/" + c.id, { method: "DELETE" });
+        await loadCategories();
+        toast("Category deleted.", "ok");
+        render();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    } }, "Delete");
+    return h("div", { class: "inline-form row" }, i, n, o,
+      h("span", { class: "muted small" }, c.product_count + (c.product_count === 1 ? " product" : " products")), save, del);
+  });
+
+  return h("div", {},
+    h("div", { class: "card" }, h("h2", {}, "Add a category"),
+      h("p", { class: "muted small" }, "The option name is what customers choose between in that category: Size for clothes, Pack size for groceries, Colour for accessories, and so on."),
+      addForm),
+    h("div", { class: "card" }, h("h2", {}, "Categories"), rows.length ? rows : h("p", { class: "muted" }, "No categories yet.")));
 }
 
 async function adminOrders() {
@@ -1329,17 +1605,27 @@ function trackingForm(order, done) {
 }
 
 // ---------- start ----------
+function applyBranding() {
+  document.title = STORE_NAME;
+  const name = document.getElementById("brand-name");
+  if (name) name.replaceChildren(document.createTextNode(STORE_NAME));
+  const foot = document.getElementById("foot");
+  if (foot) foot.replaceChildren(h("p", {}, "⚡ " + STORE_NAME + " · Made with care · Secure checkout powered by Stripe"));
+}
+
 async function start() {
+  applyBranding();
   const params = new URLSearchParams(location.search);
   const paid = params.get("paid");
   const cancelled = params.get("cancelled");
   if (paid || cancelled) {
     history.replaceState(null, "", location.pathname + "#/orders");
   } else if (!location.hash) {
-    history.replaceState(null, "", location.pathname + "#/shop");
+    history.replaceState(null, "", location.pathname + "#/home");
   }
 
   await loadMe();
+  await loadCategories();
   if (paid) {
     state.poll = 5;
     toast("Thank you! Your payment was received. Your order will update in a few seconds.", "ok");
