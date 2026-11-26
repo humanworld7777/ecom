@@ -1,252 +1,354 @@
-import hashlib
-import hmac
-import json
-import logging
-import os
-import re
-import time
-import urllib.request
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user
 from .database import get_db
-from .models import OrderDB, ProductDB, ProductSizeDB, UserDB
-
-logger = logging.getLogger(__name__)
+from .categories import router as categories_router
+from .delivery import router as delivery_router
+from .models import (
+    CartItemDB,
+    CategoryDB,
+    OrderDB,
+    OrderItemDB,
+    ProductDB,
+    ProductSizeDB,
+    UserDB,
+)
+from .payments import router as payments_router
+from .products import main_photo_urls
+from .products import router as products_router
+from .reviews import router as reviews_router
+from .site import router as site_router
 
 router = APIRouter()
-
-# Stripe requires a Checkout Session to stay open for at least 30 minutes.
-CHECKOUT_MINUTES = 35
-
-HANDLED_EVENTS = ("checkout.session.completed", "checkout.session.expired")
-
-
-# ---------- Stripe helpers ----------
-def create_checkout_session(order: OrderDB, base_url: str) -> str:
-    """Create a hosted Stripe Checkout page for the order and return its URL."""
-    secret_key = os.getenv("STRIPE_SECRET_KEY", "")
-    if not secret_key:
-        raise HTTPException(status_code=503, detail="Payments are not configured")
-
-    import stripe
-
-    currency = os.getenv("STRIPE_CURRENCY", "usd").lower()
-    line_items = [
-        {
-            "quantity": item.quantity,
-            "price_data": {
-                "currency": currency,
-                "unit_amount": int(round(item.unit_price * 100)),
-                "product_data": {
-                    "name": item.product_name
-                    + (f" (size {item.size})" if item.size else "")
-                },
-            },
-        }
-        for item in order.items
-    ]
-
-    try:
-        client = stripe.StripeClient(secret_key)
-        session = client.v1.checkout.sessions.create(
-            {
-                "mode": "payment",
-                "client_reference_id": str(order.id),
-                "metadata": {"order_id": str(order.id)},
-                "line_items": line_items,
-                "success_url": f"{base_url}/shop?paid={order.id}",
-                "cancel_url": f"{base_url}/shop?cancelled={order.id}",
-                "expires_at": int(time.time()) + CHECKOUT_MINUTES * 60,
-            }
-        )
-    except Exception:
-        logger.exception("Could not create a Stripe Checkout Session")
-        raise HTTPException(status_code=502, detail="Could not start the payment")
-
-    return session.url
+router.include_router(categories_router)
+router.include_router(products_router)
+router.include_router(reviews_router)
+router.include_router(payments_router)
+router.include_router(delivery_router)
+router.include_router(site_router)
 
 
-def fetch_checkout_session(session_id: str) -> dict:
-    """Ask Stripe for a Checkout Session (used when an event only points to it)."""
-    secret_key = os.getenv("STRIPE_SECRET_KEY", "")
-    if not secret_key:
-        raise HTTPException(status_code=503, detail="Payments are not configured")
-    if not re.fullmatch(r"cs_[A-Za-z0-9_]+", session_id or ""):
-        raise HTTPException(status_code=400, detail="Invalid session id")
+# ---------- Schemas ----------
+class CartAdd(BaseModel):
+    product_id: int
+    quantity: int = Field(default=1, ge=1, le=1000)
+    size: str = Field(default="", max_length=20)
 
-    request = urllib.request.Request(
-        f"https://api.stripe.com/v1/checkout/sessions/{session_id}",
-        headers={"Authorization": f"Bearer {secret_key}"},
+
+class CartUpdate(BaseModel):
+    quantity: int = Field(ge=1, le=1000)
+
+
+class CartItemOut(BaseModel):
+    product_id: int
+    name: str
+    size: str
+    option_label: str
+    price: float
+    quantity: int
+    subtotal: float
+    image_url: str | None
+
+
+class CartOut(BaseModel):
+    items: list[CartItemOut]
+    total: float
+
+
+class OrderItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    product_id: int | None
+    product_name: str
+    size: str
+    unit_price: float
+    quantity: int
+    subtotal: float
+
+
+class OrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: str
+    total: float
+    created_at: datetime
+    items: list[OrderItemOut]
+
+
+# ---------- Helpers ----------
+def build_cart(db: Session, user: UserDB) -> CartOut:
+    rows = (
+        db.query(CartItemDB)
+        .filter(CartItemDB.user_id == user.id)
+        .order_by(CartItemDB.id)
+        .all()
     )
-    try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            return json.loads(response.read())
-    except Exception:
-        logger.exception("Could not fetch the Checkout Session from Stripe")
-        raise HTTPException(status_code=502, detail="Could not reach Stripe")
+    product_ids = [r.product_id for r in rows]
+    photos = main_photo_urls(db, product_ids)
+    option_labels = {
+        product_id: label
+        for product_id, label in db.query(ProductDB.id, CategoryDB.option_label)
+        .join(CategoryDB, CategoryDB.id == ProductDB.category_id)
+        .filter(ProductDB.id.in_(product_ids))
+    }
+    option_prices = {
+        (s.product_id, s.label): s.price
+        for s in db.query(ProductSizeDB).filter(ProductSizeDB.product_id.in_(product_ids))
+        if s.price is not None
+    }
 
-
-def verify_signature(
-    payload: bytes, header: str, secret: str, tolerance: int = 300
-) -> bool:
-    """Check the Stripe-Signature header of a webhook request."""
-    try:
-        parts = [piece.split("=", 1) for piece in header.split(",")]
-        timestamp = next(value for key, value in parts if key == "t")
-        signatures = [value for key, value in parts if key == "v1"]
-        sent_at = int(timestamp)
-    except (ValueError, StopIteration):
-        return False
-
-    if not signatures:
-        return False
-    if abs(time.time() - sent_at) > tolerance:
-        return False
-
-    signed_payload = timestamp.encode() + b"." + payload
-    expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
-    return any(hmac.compare_digest(expected, sig) for sig in signatures)
-
-
-# ---------- Order updates ----------
-def mark_paid(db: Session, order_id: int) -> str:
-    order = db.get(OrderDB, order_id)
-    if not order:
-        return f"ignored: order {order_id} not found"
-    if order.status != "pending_payment":
-        return f"ignored: order {order_id} is already {order.status}"
-    order.status = "paid"
-    db.commit()
-    return f"order {order_id} marked paid"
-
-
-def cancel_and_restock(db: Session, order_id: int) -> str:
-    order = db.get(OrderDB, order_id)
-    if not order:
-        return f"ignored: order {order_id} not found"
-    if order.status != "pending_payment":
-        return f"ignored: order {order_id} is already {order.status}"
-    for item in order.items:
-        if item.product_id is None:
-            continue
-        if item.size:
-            size_row = (
-                db.query(ProductSizeDB)
-                .filter(
-                    ProductSizeDB.product_id == item.product_id,
-                    ProductSizeDB.label == item.size,
-                )
-                .with_for_update()
-                .first()
+    items = []
+    for r in rows:
+        price = option_prices.get((r.product_id, r.size), r.product.price)
+        items.append(
+            CartItemOut(
+                product_id=r.product_id,
+                name=r.product.name,
+                size=r.size,
+                option_label=option_labels.get(r.product_id, "Size"),
+                price=price,
+                quantity=r.quantity,
+                subtotal=round(price * r.quantity, 2),
+                image_url=photos.get(r.product_id),
             )
-            if size_row:
-                size_row.stock += item.quantity
-            continue
-        product = (
-            db.query(ProductDB)
-            .filter(ProductDB.id == item.product_id)
-            .with_for_update()
-            .first()
         )
-        if product:
-            product.stock += item.quantity
-    order.status = "cancelled"
+    total = round(sum(i.subtotal for i in items), 2)
+    return CartOut(items=items, total=total)
+
+
+def find_cart_item(db: Session, user: UserDB, product_id: int, size: str):
+    return (
+        db.query(CartItemDB)
+        .filter(
+            CartItemDB.user_id == user.id,
+            CartItemDB.product_id == product_id,
+            CartItemDB.size == size,
+        )
+        .first()
+    )
+
+
+def resolve_size(
+    db: Session, product: ProductDB, size: str
+) -> tuple[str, int, float | None]:
+    """Return the exact option name, how many are in stock, and its own price (if any).
+
+    Products with sizes need a valid size; products without sizes must not have one.
+    """
+    size = (size or "").strip()
+    sizes = db.query(ProductSizeDB).filter(ProductSizeDB.product_id == product.id).all()
+    if sizes:
+        if not size:
+            raise HTTPException(status_code=400, detail="Please choose a size")
+        match = next((s for s in sizes if s.label.lower() == size.lower()), None)
+        if match is None:
+            raise HTTPException(status_code=400, detail=f"Size {size} is not available")
+        return match.label, match.stock, match.price
+    if size:
+        raise HTTPException(status_code=400, detail="This product has no sizes")
+    return "", product.stock, None
+
+
+# ---------- Cart ----------
+@router.get("/cart", response_model=CartOut, tags=["cart"])
+def view_cart(db: Session = Depends(get_db), user: UserDB = Depends(get_current_user)):
+    return build_cart(db, user)
+
+
+@router.post("/cart/items", response_model=CartOut, status_code=201, tags=["cart"])
+def add_to_cart(
+    body: CartAdd,
+    db: Session = Depends(get_db),
+    user: UserDB = Depends(get_current_user),
+):
+    product = db.get(ProductDB, body.product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    size, in_stock, _ = resolve_size(db, product, body.size)
+    existing = find_cart_item(db, user, body.product_id, size)
+    new_qty = (existing.quantity if existing else 0) + body.quantity
+    if new_qty > in_stock:
+        raise HTTPException(status_code=400, detail=f"Only {in_stock} in stock")
+
+    if existing:
+        existing.quantity = new_qty
+    else:
+        db.add(
+            CartItemDB(
+                user_id=user.id,
+                product_id=body.product_id,
+                size=size,
+                quantity=body.quantity,
+            )
+        )
     db.commit()
-    return f"order {order_id} cancelled and stock restored"
+    return build_cart(db, user)
 
 
-# ---------- Routes ----------
-@router.post("/orders/{order_id}/pay", tags=["payments"])
-def pay_for_order(
+@router.put("/cart/items/{product_id}", response_model=CartOut, tags=["cart"])
+def set_cart_quantity(
+    product_id: int,
+    body: CartUpdate,
+    size: str = Query(default=""),
+    db: Session = Depends(get_db),
+    user: UserDB = Depends(get_current_user),
+):
+    item = find_cart_item(db, user, product_id, size)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not in cart")
+    _, in_stock, _ = resolve_size(db, item.product, item.size)
+    if body.quantity > in_stock:
+        raise HTTPException(status_code=400, detail=f"Only {in_stock} in stock")
+    item.quantity = body.quantity
+    db.commit()
+    return build_cart(db, user)
+
+
+@router.delete("/cart/items/{product_id}", response_model=CartOut, tags=["cart"])
+def remove_from_cart(
+    product_id: int,
+    size: str = Query(default=""),
+    db: Session = Depends(get_db),
+    user: UserDB = Depends(get_current_user),
+):
+    item = find_cart_item(db, user, product_id, size)
+    if item:
+        db.delete(item)
+        db.commit()
+    return build_cart(db, user)
+
+
+@router.delete("/cart", response_model=CartOut, tags=["cart"])
+def clear_cart(
+    db: Session = Depends(get_db), user: UserDB = Depends(get_current_user)
+):
+    db.query(CartItemDB).filter(CartItemDB.user_id == user.id).delete()
+    db.commit()
+    return build_cart(db, user)
+
+
+# ---------- Orders ----------
+@router.post("/orders", response_model=OrderOut, status_code=201, tags=["orders"])
+def checkout(
+    db: Session = Depends(get_db), user: UserDB = Depends(get_current_user)
+):
+    cart_items = db.query(CartItemDB).filter(CartItemDB.user_id == user.id).all()
+    if not cart_items:
+        raise HTTPException(status_code=400, detail="Your cart is empty")
+
+    # Lock the product and size rows so two checkouts can't sell the same last item
+    product_ids = sorted({i.product_id for i in cart_items})
+    products = {
+        p.id: p
+        for p in db.query(ProductDB)
+        .filter(ProductDB.id.in_(product_ids))
+        .order_by(ProductDB.id)
+        .with_for_update()
+        .all()
+    }
+    sizes: dict[int, list[ProductSizeDB]] = {}
+    for size_row in (
+        db.query(ProductSizeDB)
+        .filter(ProductSizeDB.product_id.in_(product_ids))
+        .order_by(ProductSizeDB.id)
+        .with_for_update()
+        .all()
+    ):
+        sizes.setdefault(size_row.product_id, []).append(size_row)
+
+    # The stock is held for the customer until the order is paid or the
+    # payment page expires (see app/payments.py).
+    order = OrderDB(user_id=user.id, status="pending_payment", total=0)
+    total = 0.0
+
+    for item in cart_items:
+        product = products.get(item.product_id)
+        if product is None:
+            db.rollback()
+            raise HTTPException(
+                status_code=409, detail="A product in your cart is no longer available"
+            )
+
+        product_sizes = sizes.get(product.id, [])
+        size_row = None
+        if product_sizes:
+            size_row = next((s for s in product_sizes if s.label == item.size), None)
+            if size_row is None:
+                db.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Please choose an available size for: {product.name}",
+                )
+            in_stock = size_row.stock
+        elif item.size:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=f"{product.name} is no longer sold in size {item.size}",
+            )
+        else:
+            in_stock = product.stock
+
+        if in_stock < item.quantity:
+            db.rollback()
+            raise HTTPException(
+                status_code=409, detail=f"Not enough stock for: {product.name}"
+            )
+
+        if size_row is not None:
+            size_row.stock -= item.quantity
+        else:
+            product.stock -= item.quantity
+
+        unit_price = product.price
+        if size_row is not None and size_row.price is not None:
+            unit_price = size_row.price
+
+        order.items.append(
+            OrderItemDB(
+                product_id=product.id,
+                product_name=product.name,
+                size=item.size,
+                unit_price=unit_price,
+                quantity=item.quantity,
+            )
+        )
+        total += unit_price * item.quantity
+        db.delete(item)
+
+    order.total = round(total, 2)
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    return OrderOut.model_validate(order)
+
+
+@router.get("/orders", response_model=list[OrderOut], tags=["orders"])
+def list_orders(
+    db: Session = Depends(get_db), user: UserDB = Depends(get_current_user)
+):
+    orders = (
+        db.query(OrderDB)
+        .filter(OrderDB.user_id == user.id)
+        .order_by(OrderDB.id.desc())
+        .all()
+    )
+    return [OrderOut.model_validate(o) for o in orders]
+
+
+@router.get("/orders/{order_id}", response_model=OrderOut, tags=["orders"])
+def get_order(
     order_id: int,
-    request: Request,
     db: Session = Depends(get_db),
     user: UserDB = Depends(get_current_user),
 ):
     order = db.get(OrderDB, order_id)
     if not order or order.user_id != user.id:
         raise HTTPException(status_code=404, detail="Order not found")
-    if order.status != "pending_payment":
-        raise HTTPException(status_code=409, detail=f"Order is already {order.status}")
-
-    base_url = (os.getenv("PUBLIC_URL") or str(request.base_url)).rstrip("/")
-    url = create_checkout_session(order, base_url)
-    return {"order_id": order.id, "checkout_url": url}
-
-
-@router.post("/webhooks/stripe", tags=["payments"])
-async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
-    secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-    if not secret:
-        raise HTTPException(status_code=503, detail="Webhook is not configured")
-
-    payload = await request.body()
-    header = request.headers.get("stripe-signature", "")
-    if not verify_signature(payload, header, secret):
-        raise HTTPException(status_code=400, detail="Invalid signature")
-
-    try:
-        event = json.loads(payload)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid payload")
-
-    event_type = event.get("type") or ""
-    session = (event.get("data") or {}).get("object") or {}
-
-    # "Thin" events only point to the Checkout Session, so look it up.
-    if event.get("object") == "v2.core.event":
-        event_type = event_type.removeprefix("v1.")
-        related = event.get("related_object") or {}
-        if event_type in HANDLED_EVENTS and related.get("type") == "checkout.session":
-            session = await run_in_threadpool(
-                fetch_checkout_session, related.get("id", "")
-            )
-
-    if event_type not in HANDLED_EVENTS:
-        result = f"ignored: event type {event_type}"
-    elif not session:
-        result = (
-            "ignored: the event has no data object "
-            "(unexpected event format)"
-        )
-    else:
-        reference = session.get("client_reference_id") or (
-            session.get("metadata") or {}
-        ).get("order_id")
-        try:
-            order_id = int(reference)
-        except (TypeError, ValueError):
-            order_id = None
-
-        if order_id is None:
-            result = "ignored: no order reference in the event"
-        elif event_type == "checkout.session.completed":
-            if session.get("payment_status") == "paid":
-                result = mark_paid(db, order_id)
-            else:
-                result = f"ignored: payment_status is {session.get('payment_status')}"
-        else:
-            result = cancel_and_restock(db, order_id)
-
-    logger.info("Stripe webhook %s -> %s", event_type, result)
-    return {"received": True, "result": result}
-
-
-@router.get("/payment/success", tags=["payments"])
-def payment_success(order_id: int | None = None):
-    return {
-        "message": "Thank you! Your payment is being confirmed.",
-        "order_id": order_id,
-    }
-
-
-@router.get("/payment/cancel", tags=["payments"])
-def payment_cancel(order_id: int | None = None):
-    return {
-        "message": "Payment was cancelled. Your order is held for a short time.",
-        "order_id": order_id,
-    }
+    return OrderOut.model_validate(order)
