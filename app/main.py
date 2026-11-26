@@ -12,14 +12,16 @@ from .auth import (
     verify_password,
 )
 from .cart import router as cart_router
+from .categories import seed_default_categories
 from .database import Base, engine, get_db
 from .migrate import run_migrations
 from .models import UserDB
 
 Base.metadata.create_all(bind=engine)
 run_migrations(engine)
+seed_default_categories()
 
-app = FastAPI(title="Ecom API")
+app = FastAPI(title="ZAPP Store API")
 app.include_router(cart_router)
 
 
@@ -88,12 +90,3 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 @app.get("/auth/me", response_model=UserOut)
 def me(user: UserDB = Depends(get_current_user)):
     return user
-
-
-
-
-
-
-
-
-
