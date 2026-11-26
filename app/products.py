@@ -9,6 +9,7 @@ from .auth import require_admin
 from .database import get_db
 from .models import (
     CartItemDB,
+    CategoryDB,
     ProductDB,
     ProductPhotoDB,
     ProductSizeDB,
@@ -26,6 +27,8 @@ MAX_PHOTOS = 8
 class SizeIn(BaseModel):
     label: str = Field(min_length=1, max_length=20)
     stock: int = Field(ge=0)
+    # Leave empty to use the product's own price
+    price: float | None = Field(default=None, ge=0)
 
     @field_validator("label")
     @classmethod
@@ -39,6 +42,15 @@ class SizeIn(BaseModel):
 class SizeOut(BaseModel):
     label: str
     stock: int
+    price: float | None
+
+
+class CategoryRef(BaseModel):
+    id: int
+    name: str
+    slug: str
+    icon: str
+    option_label: str
 
 
 class PhotoOut(BaseModel):
@@ -52,6 +64,8 @@ class ProductIn(BaseModel):
     price: float = Field(ge=0)
     # Used only when the product has no sizes
     stock: int = Field(default=0, ge=0)
+    category_id: int | None = None
+    # Sizes for clothes, pack sizes for groceries, other options elsewhere
     sizes: list[SizeIn] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
@@ -69,6 +83,7 @@ class ProductOut(BaseModel):
     price: float
     # Total available. For a product with sizes this is the sum of its sizes.
     stock: int
+    category: CategoryRef | None
     sizes: list[SizeOut]
     # The main photo, and all photos in order (the main one first)
     image_url: str | None
@@ -104,7 +119,9 @@ def products_out(db: Session, products: list[ProductDB]) -> list[ProductOut]:
         .filter(ProductSizeDB.product_id.in_(ids))
         .order_by(ProductSizeDB.id)
     ):
-        sizes[size.product_id].append(SizeOut(label=size.label, stock=size.stock))
+        sizes[size.product_id].append(
+            SizeOut(label=size.label, stock=size.stock, price=size.price)
+        )
 
     # Only the ids are read here, not the photos themselves
     photos = defaultdict(list)
@@ -114,6 +131,18 @@ def products_out(db: Session, products: list[ProductDB]) -> list[ProductOut]:
         .order_by(ProductPhotoDB.position, ProductPhotoDB.id)
     ):
         photos[product_id].append(PhotoOut(id=photo_id, url=photo_url(photo_id)))
+
+    category_ids = {p.category_id for p in products if p.category_id is not None}
+    categories = {
+        c.id: CategoryRef(
+            id=c.id,
+            name=c.name,
+            slug=c.slug,
+            icon=c.icon,
+            option_label=c.option_label,
+        )
+        for c in db.query(CategoryDB).filter(CategoryDB.id.in_(list(category_ids)))
+    }
 
     ratings = {}
     for product_id, total, count in (
@@ -136,6 +165,7 @@ def products_out(db: Session, products: list[ProductDB]) -> list[ProductOut]:
                 description=product.description or "",
                 price=product.price,
                 stock=total,
+                category=categories.get(product.category_id),
                 sizes=product_sizes,
                 image_url=product_photos[0].url if product_photos else None,
                 images=product_photos,
@@ -149,7 +179,14 @@ def products_out(db: Session, products: list[ProductDB]) -> list[ProductOut]:
 def replace_sizes(db: Session, product_id: int, sizes: list[SizeIn]) -> None:
     db.query(ProductSizeDB).filter(ProductSizeDB.product_id == product_id).delete()
     for size in sizes:
-        db.add(ProductSizeDB(product_id=product_id, label=size.label, stock=size.stock))
+        db.add(
+            ProductSizeDB(
+                product_id=product_id,
+                label=size.label,
+                stock=size.stock,
+                price=size.price,
+            )
+        )
 
 
 def sniff_image_type(data: bytes) -> str | None:
@@ -170,6 +207,11 @@ def get_product_or_404(db: Session, product_id: int) -> ProductDB:
     return product
 
 
+def check_category(db: Session, category_id: int | None) -> None:
+    if category_id is not None and not db.get(CategoryDB, category_id):
+        raise HTTPException(status_code=400, detail="That category does not exist")
+
+
 def get_photo_or_404(db: Session, product_id: int, photo_id: int) -> ProductPhotoDB:
     photo = db.get(ProductPhotoDB, photo_id)
     if not photo or photo.product_id != product_id:
@@ -179,9 +221,13 @@ def get_photo_or_404(db: Session, product_id: int, photo_id: int) -> ProductPhot
 
 # ---------- Products ----------
 @router.get("/products", response_model=list[ProductOut], tags=["products"])
-def list_products(db: Session = Depends(get_db)):
-    products = db.query(ProductDB).order_by(ProductDB.id).all()
-    return products_out(db, products)
+def list_products(category: str | None = None, db: Session = Depends(get_db)):
+    query = db.query(ProductDB)
+    if category:
+        query = query.join(CategoryDB, CategoryDB.id == ProductDB.category_id).filter(
+            CategoryDB.slug == category
+        )
+    return products_out(db, query.order_by(ProductDB.id).all())
 
 
 @router.get("/products/{product_id}", response_model=ProductOut, tags=["products"])
@@ -198,9 +244,11 @@ def create_product(
     db: Session = Depends(get_db),
     admin: UserDB = Depends(require_admin),
 ):
+    check_category(db, body.category_id)
     product = ProductDB(
         name=body.name.strip(),
         description=body.description.strip(),
+        category_id=body.category_id,
         price=body.price,
         stock=sum(s.stock for s in body.sizes) if body.sizes else body.stock,
     )
@@ -220,8 +268,10 @@ def update_product(
     admin: UserDB = Depends(require_admin),
 ):
     product = get_product_or_404(db, product_id)
+    check_category(db, body.category_id)
     product.name = body.name.strip()
     product.description = body.description.strip()
+    product.category_id = body.category_id
     product.price = body.price
     product.stock = sum(s.stock for s in body.sizes) if body.sizes else body.stock
     replace_sizes(db, product.id, body.sizes)
