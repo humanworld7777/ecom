@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session
 
 from .auth import get_current_user
 from .database import get_db
+from .categories import router as categories_router
 from .delivery import router as delivery_router
 from .models import (
     CartItemDB,
+    CategoryDB,
     OrderDB,
     OrderItemDB,
     ProductDB,
@@ -22,6 +24,7 @@ from .reviews import router as reviews_router
 from .site import router as site_router
 
 router = APIRouter()
+router.include_router(categories_router)
 router.include_router(products_router)
 router.include_router(reviews_router)
 router.include_router(payments_router)
@@ -44,6 +47,7 @@ class CartItemOut(BaseModel):
     product_id: int
     name: str
     size: str
+    option_label: str
     price: float
     quantity: int
     subtotal: float
@@ -84,19 +88,35 @@ def build_cart(db: Session, user: UserDB) -> CartOut:
         .order_by(CartItemDB.id)
         .all()
     )
-    photos = main_photo_urls(db, [r.product_id for r in rows])
-    items = [
-        CartItemOut(
-            product_id=r.product_id,
-            name=r.product.name,
-            size=r.size,
-            price=r.product.price,
-            quantity=r.quantity,
-            subtotal=round(r.product.price * r.quantity, 2),
-            image_url=photos.get(r.product_id),
+    product_ids = [r.product_id for r in rows]
+    photos = main_photo_urls(db, product_ids)
+    option_labels = {
+        product_id: label
+        for product_id, label in db.query(ProductDB.id, CategoryDB.option_label)
+        .join(CategoryDB, CategoryDB.id == ProductDB.category_id)
+        .filter(ProductDB.id.in_(product_ids))
+    }
+    option_prices = {
+        (s.product_id, s.label): s.price
+        for s in db.query(ProductSizeDB).filter(ProductSizeDB.product_id.in_(product_ids))
+        if s.price is not None
+    }
+
+    items = []
+    for r in rows:
+        price = option_prices.get((r.product_id, r.size), r.product.price)
+        items.append(
+            CartItemOut(
+                product_id=r.product_id,
+                name=r.product.name,
+                size=r.size,
+                option_label=option_labels.get(r.product_id, "Size"),
+                price=price,
+                quantity=r.quantity,
+                subtotal=round(price * r.quantity, 2),
+                image_url=photos.get(r.product_id),
+            )
         )
-        for r in rows
-    ]
     total = round(sum(i.subtotal for i in items), 2)
     return CartOut(items=items, total=total)
 
@@ -113,8 +133,10 @@ def find_cart_item(db: Session, user: UserDB, product_id: int, size: str):
     )
 
 
-def resolve_size(db: Session, product: ProductDB, size: str) -> tuple[str, int]:
-    """Return the exact size name and how many are in stock.
+def resolve_size(
+    db: Session, product: ProductDB, size: str
+) -> tuple[str, int, float | None]:
+    """Return the exact option name, how many are in stock, and its own price (if any).
 
     Products with sizes need a valid size; products without sizes must not have one.
     """
@@ -126,10 +148,10 @@ def resolve_size(db: Session, product: ProductDB, size: str) -> tuple[str, int]:
         match = next((s for s in sizes if s.label.lower() == size.lower()), None)
         if match is None:
             raise HTTPException(status_code=400, detail=f"Size {size} is not available")
-        return match.label, match.stock
+        return match.label, match.stock, match.price
     if size:
         raise HTTPException(status_code=400, detail="This product has no sizes")
-    return "", product.stock
+    return "", product.stock, None
 
 
 # ---------- Cart ----------
@@ -148,7 +170,7 @@ def add_to_cart(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    size, in_stock = resolve_size(db, product, body.size)
+    size, in_stock, _ = resolve_size(db, product, body.size)
     existing = find_cart_item(db, user, body.product_id, size)
     new_qty = (existing.quantity if existing else 0) + body.quantity
     if new_qty > in_stock:
@@ -180,7 +202,7 @@ def set_cart_quantity(
     item = find_cart_item(db, user, product_id, size)
     if not item:
         raise HTTPException(status_code=404, detail="Item not in cart")
-    _, in_stock = resolve_size(db, item.product, item.size)
+    _, in_stock, _ = resolve_size(db, item.product, item.size)
     if body.quantity > in_stock:
         raise HTTPException(status_code=400, detail=f"Only {in_stock} in stock")
     item.quantity = body.quantity
@@ -284,16 +306,20 @@ def checkout(
         else:
             product.stock -= item.quantity
 
+        unit_price = product.price
+        if size_row is not None and size_row.price is not None:
+            unit_price = size_row.price
+
         order.items.append(
             OrderItemDB(
                 product_id=product.id,
                 product_name=product.name,
                 size=item.size,
-                unit_price=product.price,
+                unit_price=unit_price,
                 quantity=item.quantity,
             )
         )
-        total += product.price * item.quantity
+        total += unit_price * item.quantity
         db.delete(item)
 
     order.total = round(total, 2)
